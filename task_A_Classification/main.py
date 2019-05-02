@@ -1,5 +1,4 @@
 from utils import process_tweet, under_sample
-from models import *
 import numpy as np
 import pandas as pd
 import sklearn
