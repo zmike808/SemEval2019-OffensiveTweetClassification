@@ -56,7 +56,7 @@ if use_pretrained_embeddings:
     else:
         # Download embeddings from https://nlp.stanford.edu/projects/glove/
         #                          https://nlp.stanford.edu/data/glove.twitter.27B.zip
-        embedding_path = "glove.twitter.27B.100d.txt"
+        embedding_path = Path("glove.twitter.27B.100d.txt")
 
         def get_coefs(word, *arr):
             return word, np.asarray(arr, dtype='float32')
@@ -88,12 +88,11 @@ params = dict(remove_USER_URL=True,
 
 print("Loading training data")
 df_a = pd.read_csv('start-kit/training-v1/offenseval-training-v1.tsv', sep='\t')
-df_a_trial = pd.read_csv('start-kit/trial-data/offenseval-trial.txt', sep='\t')
+df_a_trial = pd.read_csv('start-kit/trial-data/offenseval-trial.txt', sep='\t',names=['id','tweet','subtask_a','subtask_b', 'subtask_c', ])
 print("Done!")
-
 print("Preprocessing...")
 
-X = df_a['tweet'].apply(lambda x: process_tweet(x, **params, trial=False, sym_spell=None)).values
+X = df_a.tweet.apply(lambda x: process_tweet(x, **params, trial=False, sym_spell=None)).values
 y = df_a['subtask_a'].replace({'OFF': 1, 'NOT': 0}).values
 class_weights = sklearn.utils.class_weight.compute_class_weight('balanced', np.unique(y), y.reshape(-1))
 
