@@ -1,3 +1,21 @@
+from sklearn.metrics import classification_report
+from sklearn.metrics import confusion_matrix
+import itertools
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras.layers import Dense, Flatten, LSTM, Conv1D, MaxPooling1D, Dropout, Activation, Bidirectional, concatenate, \
+    CuDNNLSTM, CuDNNGRU, SpatialDropout1D, GlobalAveragePooling1D, GlobalMaxPooling1D, Input, \
+    Flatten, GRU
+from tensorflow.keras.layers import Embedding
+from tensorflow.keras.models import Model, Sequential
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.preprocessing.text import Tokenizer
+from sklearn.metrics import roc_auc_score, f1_score
+from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, Callback
+from tensorflow.keras import optimizers
+import tensorflow.keras.backend as K
+import os
+from symspellpy.symspellpy import SymSpell, Verbosity
 from utils import process_tweet, under_sample
 import numpy as np
 import pandas as pd
@@ -19,23 +37,6 @@ from nltk.tokenize import TweetTokenizer
 from nltk.stem.wordnet import WordNetLemmatizer
 nltk.download('wordnet')
 nltk.download('stopwords')
-from symspellpy.symspellpy import SymSpell, Verbosity
-
-# KERAS / TF
-import os
-import keras.backend as K
-from keras import optimizers
-from keras.callbacks import EarlyStopping, ModelCheckpoint, Callback
-from sklearn.metrics import roc_auc_score, f1_score
-from keras.preprocessing.text import Tokenizer
-from keras.preprocessing.sequence import pad_sequences
-from keras.models import Model, Sequential
-from keras.layers.embeddings import Embedding
-from keras.layers import Dense, Flatten, LSTM, Conv1D, MaxPooling1D, Dropout, Activation, Bidirectional, concatenate, \
-                         CuDNNLSTM, CuDNNGRU, SpatialDropout1D, GlobalAveragePooling1D, GlobalMaxPooling1D, Input, \
-                         Flatten, GRU
-
-print("GPUs: " + str(K.tensorflow_backend._get_available_gpus()))
 
 # Setting Flags
 balance_dataset = False             # If true, it under-samples the training dataset to get same amount of labels
@@ -376,9 +377,6 @@ plt.legend()
 plt.title("ROC AUC", fontsize=15)
 plt.show()
 
-# Confusion matrix & Classication Report
-import itertools
-from sklearn.metrics import confusion_matrix
 
 def plot_confusion_matrix(cm, classes,
                           normalize=False,
@@ -427,5 +425,4 @@ plot = plot_confusion_matrix(cm, classes=['NOT-OFFENSIVE', 'OFFENSIVE'], normali
 plt.show()
 # print(cm)
 
-from sklearn.metrics import classification_report
 print(classification_report(y_eval, y_pred))

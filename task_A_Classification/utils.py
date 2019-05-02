@@ -1,15 +1,20 @@
-import numpy as np
+import html
+import html
 import re
 import string
-import html
+from random import shuffle
+
 import nltk
+import numpy as np
 from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
-from nltk.tokenize import TweetTokenizer
 from nltk.stem.wordnet import WordNetLemmatizer
+from nltk.tokenize import TweetTokenizer, word_tokenize
+from sklearn.metrics import f1_score, roc_auc_score
+from symspellpy.symspellpy import SymSpell, Verbosity
+from tensorflow.keras.callbacks import Callback
+
 nltk.download('wordnet')
 nltk.download('stopwords')
-from symspellpy.symspellpy import SymSpell, Verbosity
 
 
 def process_tweet(tweet,
@@ -150,7 +155,6 @@ def process_tweet(tweet,
 
     return clean_tweet
 
-from random import shuffle
 def under_sample(X, y):
     idx_0 = np.where(y == 0)[0].tolist()
     idx_1 = np.where(y == 1)[0].tolist()
@@ -163,8 +167,3 @@ def under_sample(X, y):
     y = y[idx].reshape(-1, 1)
 
     return X, y
-
-
-from keras.callbacks import Callback
-from sklearn.metrics import roc_auc_score
-from sklearn.metrics import f1_score
