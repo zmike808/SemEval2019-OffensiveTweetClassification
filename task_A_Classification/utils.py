@@ -18,12 +18,13 @@ from nltk.corpus import wordnet as wm
 nltk.download('wordnet')
 nltk.download('stopwords')
 sym_spell = SymSpell(max_dictionary_edit_distance=2, prefix_length=7,
-                 count_threshold=1, compact_level=0)
-# if create_dict:
-sym_spell.words
-sym_spell.create_dictionary(Path('english_words_479k.txt'))
-# else:
-    # sym_spell.load_dictionary(Path('./frequency_dictionary_en_82_765.txt'), 0,1)
+                 count_threshold=1, compact_level=5)
+
+
+
+# sym_spell.create_dictionary(Path('english_words_479k.txt'))
+
+sym_spell.load_dictionary(Path('./frequency_dictionary_en_82_765.txt'), 0,1)
 
 def process_tweet(tweet,
                   remove_USER_URL=True,
@@ -39,6 +40,7 @@ def process_tweet(tweet,
                   correct_spelling=True,
                   create_dict=True
                   ):
+
 
     """
     This function receives tweets and returns clean word-list

@@ -85,35 +85,64 @@ params = dict(remove_USER_URL=True,
               correct_spelling=True
              )
 
-
 print("Loading training data")
-df_a = pd.read_csv('start-kit/training-v1/offenseval-training-v1.tsv', sep='\t')
-df_a_trial = pd.read_csv('start-kit/trial-data/offenseval-trial.txt', sep='\t')#,names=['id','tweet','subtask_a','subtask_b', 'subtask_c', ])
+train_balanced = Path('train_balanced.csv')
+trial_balanced = Path('trial_balanced.csv')
+train_clean = Path('train_clean.csv')
+trial_clean = Path('trial_clean.csv')
+
+if balance_dataset and train_balanced.exists() and trial_balanced.exists():
+    train_data = train_balanced
+    trial_data=trial_balanced
+elif train_clean.exists and trial_clean.exists():
+    train_data = train_clean
+    trial_data=trial_clean
+else:
+    train_data = Path('start-kit/training-v1/offenseval-training-v1.tsv')
+    trial_data = Path('start-kit/trial-data/offenseval-trial.txt')
+
+df_a = pd.read_csv(train_data, sep='\t')
+df_a_trial = pd.read_csv(trial_data, sep='\t')#,names=['id','tweet','subtask_a','subtask_b', 'subtask_c', ])
 print("Done!")
 print("Preprocessing...")
 
-X = df_a['tweet'].apply(lambda x: process_tweet(x, **params, trial=False)).values
-y = df_a['subtask_a'].replace({'OFF': 1, 'NOT': 0}).values
-class_weights = sklearn.utils.class_weight.compute_class_weight('balanced', np.unique(y), y.reshape(-1))
+df_a.tweet = df_a['tweet'].apply(lambda x: process_tweet(x, **params, trial=False))
+df_a.subtask_a = df_a['subtask_a'].replace({'OFF': 1, 'NOT': 0})
 
-X_trial = df_a_trial['tweet'].apply(lambda x: process_tweet(x, **params, trial=True, sym_spell=None)).values
-y_trial = df_a_trial['subtask_a'].replace({'OFF': 1, 'NOT': 0}).values
+train_tweet = df_a.tweet.values
+train_label = df_a.subtask_a.values
+
+class_weights = sklearn.utils.class_weight.compute_class_weight('balanced', np.unique(train_label), train_label.reshape(-1))
+
+df_a_trial['tweet'] = df_a_trial['tweet'].apply(lambda x: process_tweet(x, **params, trial=True))
+df_a_trial['subtask_a'] = df_a_trial['subtask_a'].replace({'OFF': 1, 'NOT': 0})
+
+trial_tweet = df_a_trial['tweet'].values
+trial_label = df_a_trial['subtask_a'].values
+
 print("Done!")
 
 if balance_dataset:
-    X, y = under_sample(X, y)
+    df_a.to_csv(train_clean)
+    df_a_trial.to_csv(trial_clean)
+    train_tweet, train_label = under_sample(train_tweet, train_label)
+    df_a.to_csv(train_balanced)
+    df_a_trial.to_csv(trial_balanced)
+else:
+    df_a.to_csv(train_clean)
+    df_a_trial.to_csv(trial_clean)
 
-print("EXAMPLES OF PROCESSED TWEETS [train/trial]")
-print("_________________________________________________________________________________________________________")
-for id in range(10, 15):
-    print("Un-processed:  " + df_a['tweet'][id])
-    print("Processed:     " + X[id])
-    print("")
-print("_________________________________________________________________________________________________________")
-for id in range(10, 15):
-    print("Un-processed:  " + df_a_trial['tweet'][id])
-    print("Processed:     " + X_trial[id])
-    print("")
+# print("EXAMPLES OF PROCESSED TWEETS [train/trial]")
+# print("_________________________________________________________________________________________________________")
+# for id in range(10, 15):
+#     print("Un-processed:  " + df_a['tweet'][id])
+#     print("Processed:     " + X[id])
+#     print("")
+# print("_________________________________________________________________________________________________________")
+# for id in range(10, 15):
+#     print("Un-processed:  " + df_a_trial['tweet'][id])
+#     print("Processed:     " + trial_tweet[id])
+#     print("")
 
 #########################################################################################
 # 3. BUILD VOCABULARY FROM FULL CORPUS AND PREPARE INPUT                                #
@@ -124,21 +153,21 @@ max_features = 30000
 
 # Tokenize all tweets
 tokenizer = Tokenizer(lower=True, filters='', split=' ')
-X_all = list(X) + list(X_trial)
+X_all = list(train_tweet) + list(trial_tweet)
 tokenizer.fit_on_texts(X_all)
 print(f"Num of unique tokens in tokenizer: {len(tokenizer.word_index)}")
 
 # Get sequences for each dataset
-sequences = tokenizer.texts_to_sequences(X)
-sequences_trial = tokenizer.texts_to_sequences(X_trial)
+sequences = tokenizer.texts_to_sequences(train_tweet)
+sequences_trial = tokenizer.texts_to_sequences(trial_tweet)
 
 # Pad sequences
-X = pad_sequences(sequences, maxlen = max_seq_len)
-X_trial = pad_sequences(sequences_trial, maxlen = max_seq_len)
+train_tweet = pad_sequences(sequences, maxlen = max_seq_len)
+trial_tweet = pad_sequences(sequences_trial, maxlen = max_seq_len)
 
 # Reshape labels
-y = y.reshape(-1,1)
-y_trial = y_trial.reshape(-1,1)
+train_label = train_label.reshape(-1,1)
+trial_label = trial_label.reshape(-1,1)
 
 if use_pretrained_embeddings:
     # Build Embedding Matrix
@@ -310,7 +339,7 @@ def doit(model, embed_idx, type=0):
         model.layers[embed_idx].set_weights([embedding_matrix])
     model.summary()
 
-    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, stratify=y)
+    X_train, X_val, y_train, y_val = train_test_split(train_tweet, train_label, test_size=0.2, stratify=train_label)
 
     class_weights = sklearn.utils.class_weight.compute_class_weight('balanced', np.unique(y_train), y_train.reshape(-1))
     weights_dict = dict()
@@ -412,8 +441,8 @@ def doit(model, embed_idx, type=0):
         plt.xlabel('Predicted label')
         plt.tight_layout()
 
-    X_eval = X_trial
-    y_eval = y_trial
+    X_eval = trial_tweet
+    y_eval = trial_label
 
     y_pred = model.predict(X_eval)
     y_pred = np.round(y_pred)
