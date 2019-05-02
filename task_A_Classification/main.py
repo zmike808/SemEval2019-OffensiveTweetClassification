@@ -1,20 +1,3 @@
-from sklearn.metrics import classification_report
-from sklearn.metrics import confusion_matrix
-import itertools
-import tensorflow as tf
-from tf.keras.layers import Dense, Flatten, LSTM, Conv1D, MaxPooling1D, Dropout, Activation, Bidirectional, concatenate, \
-    CuDNNLSTM, CuDNNGRU, SpatialDropout1D, GlobalAveragePooling1D, GlobalMaxPooling1D, Input, \
-    Flatten, GRU
-from tf.keras.layers.embeddings import Embedding
-from tf.keras.models import Model, Sequential
-from tf.keras.preprocessing.sequence import pad_sequences
-from tf.keras.preprocessing.text import Tokenizer
-from sklearn.metrics import roc_auc_score, f1_score
-from tf.keras.callbacks import EarlyStopping, ModelCheckpoint, Callback
-from tf.keras import optimizers
-import tf.keras.bakend as K
-import os
-from symspellpy.symspellpy import SymSpell, Verbosity
 from utils import process_tweet, under_sample
 import numpy as np
 import pandas as pd
@@ -36,16 +19,27 @@ from nltk.tokenize import TweetTokenizer
 from nltk.stem.wordnet import WordNetLemmatizer
 nltk.download('wordnet')
 nltk.download('stopwords')
+from symspellpy.symspellpy import SymSpell, Verbosity
 
 # KERAS / TF
+import os
+import keras.backend as K
+from keras import optimizers
+from keras.callbacks import EarlyStopping, ModelCheckpoint, Callback
+from sklearn.metrics import roc_auc_score, f1_score
+from keras.preprocessing.text import Tokenizer
+from keras.preprocessing.sequence import pad_sequences
+from keras.models import Model, Sequential
+from keras.layers.embeddings import Embedding
+from keras.layers import Dense, Flatten, LSTM, Conv1D, MaxPooling1D, Dropout, Activation, Bidirectional, concatenate, \
+                         CuDNNLSTM, CuDNNGRU, SpatialDropout1D, GlobalAveragePooling1D, GlobalMaxPooling1D, Input, \
+                         Flatten, GRU
 
 print("GPUs: " + str(K.tensorflow_backend._get_available_gpus()))
 
 # Setting Flags
-# If true, it under-samples the training dataset to get same amount of labels
-balance_dataset = False
-# If true, it enables the use of GloVe pre-trained Twitter word-embeddings
-use_pretrained_embeddings = True
+balance_dataset = False             # If true, it under-samples the training dataset to get same amount of labels
+use_pretrained_embeddings = True    # If true, it enables the use of GloVe pre-trained Twitter word-embeddings
 
 
 #########################################################################################
@@ -69,8 +63,7 @@ if use_pretrained_embeddings:
         # Construct embedding table (word -> vector)
         print("Building embedding index [word->vector]", end="\n")
         t0 = time.time()
-        embedding_index = dict(get_coefs(*o.strip().split(" "))
-                               for o in open(embedding_path, encoding="utf8"))
+        embedding_index = dict(get_coefs(*o.strip().split(" ")) for o in open(embedding_path, encoding="utf8"))
 
         with open("embedding_index.pkl", "wb") as f:
             pickle.dump(embedding_index, f)
@@ -89,25 +82,21 @@ params = dict(remove_USER_URL=True,
               reduce_lengthenings=True,
               segment_words=False,
               correct_spelling=False
-              )
+             )
 
 
 print("Loading training data")
-df_a = pd.read_csv(
-    'start-kit/training-v1/offenseval-training-v1.tsv', sep='\t')
+df_a = pd.read_csv('start-kit/training-v1/offenseval-training-v1.tsv', sep='\t')
 df_a_trial = pd.read_csv('start-kit/trial-data/offenseval-trial.txt', sep='\t')
 print("Done!")
 
 print("Preprocessing...")
 
-X = df_a['tweet'].apply(lambda x: process_tweet(
-    x, **params, trial=False, sym_spell=None)).values
+X = df_a['tweet'].apply(lambda x: process_tweet(x, **params, trial=False, sym_spell=None)).values
 y = df_a['subtask_a'].replace({'OFF': 1, 'NOT': 0}).values
-class_weights = sklearn.utils.class_weight.compute_class_weight(
-    'balanced', np.unique(y), y.reshape(-1))
+class_weights = sklearn.utils.class_weight.compute_class_weight('balanced', np.unique(y), y.reshape(-1))
 
-X_trial = df_a_trial['tweet'].apply(lambda x: process_tweet(
-    x, **params, trial=True, sym_spell=None)).values
+X_trial = df_a_trial['tweet'].apply(lambda x: process_tweet(x, **params, trial=True, sym_spell=None)).values
 y_trial = df_a_trial['subtask_a'].replace({'OFF': 1, 'NOT': 0}).values
 print("Done!")
 
@@ -144,12 +133,12 @@ sequences = tokenizer.texts_to_sequences(X)
 sequences_trial = tokenizer.texts_to_sequences(X_trial)
 
 # Pad sequences
-X = pad_sequences(sequences, maxlen=max_seq_len)
-X_trial = pad_sequences(sequences_trial, maxlen=max_seq_len)
+X = pad_sequences(sequences, maxlen = max_seq_len)
+X_trial = pad_sequences(sequences_trial, maxlen = max_seq_len)
 
 # Reshape labels
-y = y.reshape(-1, 1)
-y_trial = y_trial.reshape(-1, 1)
+y = y.reshape(-1,1)
+y_trial = y_trial.reshape(-1,1)
 
 if use_pretrained_embeddings:
     # Build Embedding Matrix
@@ -163,8 +152,7 @@ if use_pretrained_embeddings:
     embedding_matrix = np.zeros((nb_words + 1, embed_size))
     print(f"Building embedding matrix {embedding_matrix.shape}", end="")
     for word, i in word_index.items():
-        if i >= max_features:
-            continue
+        if i >= max_features: continue
         embedding_vector = embedding_index.get(word)
         if embedding_vector is not None:
             embedding_matrix[i] = embedding_vector
@@ -197,8 +185,6 @@ fig.savefig("sentence_lenghts.pdf", bbox_inches="tight")
 #########################################################################################
 # 3. BUILD AND TRAIN THE MODEL                                                          #
 #########################################################################################
-
-
 class ROC_F1(Callback):
     def __init__(self, validation_data=(), training_data=(), interval=1):
         super(Callback, self).__init__()
@@ -213,8 +199,7 @@ class ROC_F1(Callback):
     def on_epoch_end(self, epoch, logs={}):
         lr = self.model.optimizer.lr
         if self.model.optimizer.initial_decay > 0:
-            lr = lr * (1. / (1. + self.model.optimizer.decay * K.cast(
-                self.model.optimizer.iterations, K.dtype(self.model.optimizer.decay))))
+            lr = lr * (1. / (1. + self.model.optimizer.decay * K.cast(self.model.optimizer.iterations, K.dtype(self.model.optimizer.decay))))
         if epoch % self.interval == 0:
             y_pred_train = np.round(self.model.predict(X_train, verbose=0))
             y_pred_val = np.round(self.model.predict(self.X_val, verbose=0))
@@ -233,24 +218,18 @@ class ROC_F1(Callback):
                                                                                                                       auc_val, f1_val))
         print("\n\n")
 
-
 def build_Bi_GRU_LSTM_CN_model(lr=0.001, lr_decay=0.01, recurrent_units=0, dropout=0.0):
     # Model architecture
     inputs = Input(shape=(max_seq_len,), name="Input")
 
-    emb = Embedding(nb_words + 1, embed_size,
-                    trainable=train_embeddings, name="WordEmbeddings")(inputs)
+    emb = Embedding(nb_words + 1, embed_size, trainable=train_embeddings, name="WordEmbeddings")(inputs)
     emb = SpatialDropout1D(dropout)(emb)
 
-    gru_out = Bidirectional(
-        CuDNNGRU(RECURRENT_UNITS, return_sequences=True), name="Bi_GRU")(emb)
-    gru_out = Conv1D(32, 4, activation='relu', padding='valid',
-                     kernel_initializer='he_uniform')(gru_out)
+    gru_out = Bidirectional(CuDNNGRU(RECURRENT_UNITS, return_sequences=True), name="Bi_GRU")(emb)
+    gru_out = Conv1D(32, 4, activation='relu', padding='valid', kernel_initializer='he_uniform')(gru_out)
 
-    lstm_out = Bidirectional(
-        CuDNNLSTM(RECURRENT_UNITS, return_sequences=True), name="Bi_LSTM")(emb)
-    lstm_out = Conv1D(32, 4, activation='relu', padding='valid',
-                      kernel_initializer='he_uniform')(lstm_out)
+    lstm_out = Bidirectional(CuDNNLSTM(RECURRENT_UNITS, return_sequences=True), name="Bi_LSTM")(emb)
+    lstm_out = Conv1D(32, 4, activation='relu', padding='valid', kernel_initializer='he_uniform')(lstm_out)
 
     avg_pool1 = GlobalAveragePooling1D(name="GlobalAVGPooling_GRU")(gru_out)
     max_pool1 = GlobalMaxPooling1D(name="GlobalMAXPooling_GRU")(gru_out)
@@ -269,8 +248,7 @@ def build_Bi_GRU_LSTM_CN_model(lr=0.001, lr_decay=0.01, recurrent_units=0, dropo
 
 def build_LSTM():
     model = Sequential()
-    model.add(Embedding(nb_words + 1, embed_size, input_length=max_seq_len,
-                        trainable=train_embeddings, name="Embeddings"))
+    model.add(Embedding(nb_words + 1, embed_size, input_length=max_seq_len, trainable=train_embeddings, name="Embeddings"))
     model.add(SpatialDropout1D(DROPOUT))
     model.add(Bidirectional(LSTM(RECURRENT_UNITS)))
     model.add(Dense(1, activation='sigmoid'))
@@ -280,14 +258,11 @@ def build_LSTM():
 def build_CNN_LSTM():
     EMBEDDING_DIM = embed_size
     model = Sequential()
-    model.add(Embedding(nb_words + 1, EMBEDDING_DIM, input_length=max_seq_len,
-                        trainable=train_embeddings, name="Embeddings"))
+    model.add(Embedding(nb_words + 1, EMBEDDING_DIM, input_length=max_seq_len, trainable=train_embeddings, name="Embeddings"))
     model.add(SpatialDropout1D(DROPOUT))
-    model.add(Conv1D(64, 4, activation='relu',
-                     kernel_initializer='he_uniform'))
+    model.add(Conv1D(64, 4, activation='relu', kernel_initializer='he_uniform'))
     model.add(MaxPooling1D(pool_size=4))
-    model.add(Bidirectional(
-        LSTM(RECURRENT_UNITS, dropout=LSTM_DROPOUT, recurrent_dropout=LSTM_DROPOUT)))
+    model.add(Bidirectional(LSTM(RECURRENT_UNITS, dropout=LSTM_DROPOUT, recurrent_dropout=LSTM_DROPOUT)))
     model.add(Dense(1, activation='sigmoid'))
     return model, 0
 
@@ -295,30 +270,27 @@ def build_CNN_LSTM():
 def build_LSTM_CNN():
     EMBEDDING_DIM = embed_size
     model = Sequential()
-    model.add(Embedding(nb_words + 1, EMBEDDING_DIM, input_length=max_seq_len,
-                        trainable=train_embeddings, name="Embeddings"))
+    model.add(Embedding(nb_words + 1, EMBEDDING_DIM, input_length=max_seq_len, trainable=train_embeddings, name="Embeddings"))
     #     model.add(SpatialDropout1D(DROPOUT))
     model.add(Dropout(DROPOUT))
     model.add(Bidirectional(CuDNNLSTM(RECURRENT_UNITS, return_sequences=True)))
     #     model.add(Bidirectional(LSTM(EMBEDDING_DIM, return_sequences=True, dropout=LSTM_DROPOUT, recurrent_dropout=LSTM_DROPOUT)))
-    model.add(Conv1D(64, kernel_size=2, activation='relu',
-                     padding='valid', kernel_initializer='he_uniform'))
+    model.add(Conv1D(64, kernel_size=2, activation='relu', padding='valid', kernel_initializer='he_uniform'))
     model.add(Flatten())
     model.add(Dense(1, activation='sigmoid'))
 
     return model, 0
 
-
 # SET HYPERPARAMETERS
-LR = 0.004
-LR_DECAY = 0
-EPOCHS = 20
-BATCH_SIZE = 32
-EMBEDDING_DIM = embed_size
-DROPOUT = 0.4         # Connection drop ratio for CNN to LSTM dropout
-LSTM_DROPOUT = 0.0         # Connection drop ratio for gate-specific dropout
-BIDIRECTIONAL = True
-RECURRENT_UNITS = 100
+LR               = 0.004
+LR_DECAY         = 0
+EPOCHS           = 20
+BATCH_SIZE       = 32
+EMBEDDING_DIM    = embed_size
+DROPOUT          = 0.4         # Connection drop ratio for CNN to LSTM dropout
+LSTM_DROPOUT     = 0.0         # Connection drop ratio for gate-specific dropout
+BIDIRECTIONAL    = True
+RECURRENT_UNITS  = 100
 train_embeddings = not use_pretrained_embeddings
 # ----------------------
 
@@ -332,30 +304,24 @@ model, embed_idx = build_LSTM()
 
 # OPTIMIZER | COMPILE | EMBEDDINGS
 optim = optimizers.Adam(lr=LR, decay=LR_DECAY)
-model.compile(loss='binary_crossentropy',
-              optimizer=optim, metrics=['accuracy'])
+model.compile(loss='binary_crossentropy', optimizer=optim, metrics=['accuracy'])
 if use_pretrained_embeddings:
     model.layers[embed_idx].set_weights([embedding_matrix])
 model.summary()
 
-X_train, X_val, y_train, y_val = train_test_split(
-    X, y, test_size=0.2, stratify=y)
+X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, stratify=y)
 
-class_weights = sklearn.utils.class_weight.compute_class_weight(
-    'balanced', np.unique(y_train), y_train.reshape(-1))
+class_weights = sklearn.utils.class_weight.compute_class_weight('balanced', np.unique(y_train), y_train.reshape(-1))
 weights_dict = dict()
 for i, weight in enumerate(class_weights):
     weights_dict[i] = weight
 print("Class weights (to address dataset imbalance):")
 
 # FIT THE MODEL ------------------------------------------------------------------------------------------------
-auc_f1 = ROC_F1(validation_data=(X_val, y_val),
-                training_data=(X_train, y_train), interval=1)
-earlystop = EarlyStopping(monitor='val_loss', patience=15,
-                          verbose=1, mode='auto', restore_best_weights=True)
+auc_f1 = ROC_F1(validation_data=(X_val, y_val), training_data=(X_train, y_train), interval=1)
+earlystop = EarlyStopping(monitor='val_loss', patience=15, verbose=1, mode='auto', restore_best_weights=True)
 filepath = "weights-improvement-{epoch:02d}-{val_acc:.5f}-{val_loss:.5f}.hdf5"
-checkpoint = ModelCheckpoint(
-    filepath, save_best_only=True, monitor='val_loss', verbose=1, mode='min')
+checkpoint = ModelCheckpoint(filepath, save_best_only=True, monitor='val_loss', verbose=1, mode='min')
 
 train_history = model.fit(X_train, y_train, validation_data=(X_val, y_val), batch_size=BATCH_SIZE, epochs=EPOCHS,
                           verbose=1, class_weight=class_weights, callbacks=[earlystop, checkpoint, auc_f1])
@@ -372,24 +338,18 @@ n_epochs = 40
 # n_epochs = len(train_history.history['loss'])
 
 # Plot Loss
-plt.figure(figsize=(width, height))
+plt.figure(figsize=(width,height))
 plt.plot(train_history.history['loss'], label="Train Loss")
 plt.plot(train_history.history['val_loss'], label="Validation Loss")
-plt.xlim([0, n_epochs-1])
-plt.xticks(list(range(n_epochs)))
-plt.grid(True)
-plt.legend()
+plt.xlim([0,n_epochs-1]); plt.xticks(list(range(n_epochs)));   plt.grid(True);   plt.legend()
 plt.title("Loss (Binary Cross-entropy)", fontsize=15)
 plt.show()
 
 # Plot accuracy
-plt.figure(figsize=(width, height))
+plt.figure(figsize=(width,height))
 plt.plot(train_history.history['acc'], label="Train Accuracy")
 plt.plot(train_history.history['val_acc'], label="Validation Accuracy")
-plt.xlim([0, n_epochs-1])
-plt.xticks(list(range(n_epochs)))
-plt.grid(True)
-plt.legend()
+plt.xlim([0,n_epochs-1]); plt.xticks(list(range(n_epochs)));   plt.grid(True);   plt.legend()
 plt.title("Accuracy", fontsize=15)
 plt.show()
 
@@ -397,9 +357,9 @@ plt.show()
 plt.figure(figsize=(width, height))
 plt.plot(auc_f1.f1s_train, label="Train F1")
 plt.plot(auc_f1.f1s_val, label="Validation F1")
-plt.xlim([0, n_epochs - 1])
-plt.xticks(list(range(n_epochs)))
-plt.grid(True)
+plt.xlim([0, n_epochs - 1]);
+plt.xticks(list(range(n_epochs)));
+plt.grid(True);
 plt.legend()
 plt.title("F1-score", fontsize=15)
 plt.show()
@@ -408,16 +368,17 @@ plt.show()
 plt.figure(figsize=(width, height))
 plt.plot(auc_f1.aucs_train, label="Train ROC AUC")
 plt.plot(auc_f1.aucs_val, label="Validation ROC AUC")
-plt.xlim([0, n_epochs - 1])
-plt.xticks(list(range(n_epochs)))
-plt.grid(True)
+plt.xlim([0, n_epochs - 1]);
+plt.xticks(list(range(n_epochs)));
+plt.grid(True);
 plt.legend()
 plt.legend()
 plt.title("ROC AUC", fontsize=15)
 plt.show()
 
 # Confusion matrix & Classication Report
-
+import itertools
+from sklearn.metrics import confusion_matrix
 
 def plot_confusion_matrix(cm, classes,
                           normalize=False,
@@ -453,20 +414,18 @@ def plot_confusion_matrix(cm, classes,
     plt.xlabel('Predicted label')
     plt.tight_layout()
 
-
 X_eval = X_trial
 y_eval = y_trial
 
 y_pred = model.predict(X_eval)
 y_pred = np.round(y_pred)
-print("Validation Accuracy: {:0.2f}%".format(
-    np.sum(y_eval == y_pred) / y_eval.shape[0] * 100))
+print("Validation Accuracy: {:0.2f}%".format(np.sum(y_eval == y_pred) / y_eval.shape[0] * 100))
 
 cm = confusion_matrix(y_eval, y_pred)
 fig = plt.figure(figsize=(10, 10))
-plot = plot_confusion_matrix(cm, classes=[
-                             'NOT-OFFENSIVE', 'OFFENSIVE'], normalize=True, title='Confusion matrix')
+plot = plot_confusion_matrix(cm, classes=['NOT-OFFENSIVE', 'OFFENSIVE'], normalize=True, title='Confusion matrix')
 plt.show()
 # print(cm)
 
+from sklearn.metrics import classification_report
 print(classification_report(y_eval, y_pred))
