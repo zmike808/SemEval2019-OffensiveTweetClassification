@@ -39,7 +39,7 @@ nltk.download('wordnet')
 nltk.download('stopwords')
 
 # Setting Flags
-balance_dataset = False             # If true, it under-samples the training dataset to get same amount of labels
+balance_dataset = True             # If true, it under-samples the training dataset to get same amount of labels
 use_pretrained_embeddings = True    # If true, it enables the use of GloVe pre-trained Twitter word-embeddings
 
 
@@ -56,7 +56,7 @@ if use_pretrained_embeddings:
     else:
         # Download embeddings from https://nlp.stanford.edu/projects/glove/
         #                          https://nlp.stanford.edu/data/glove.twitter.27B.zip
-        embedding_path = Path("glove.twitter.27B.100d.txt")
+        embedding_path = Path("glove.twitter.27B.200d.txt")
 
         def get_coefs(word, *arr):
             return word, np.asarray(arr, dtype='float32')
@@ -75,24 +75,24 @@ if use_pretrained_embeddings:
 # 2. LOAD TWEET DATA AND PRE-PROCESS                                                    #
 #########################################################################################
 params = dict(remove_USER_URL=True,
-              remove_stopwords=False,
+              remove_stopwords=True,
               remove_HTMLentities=True,
               remove_punctuation=True,
               appostrophe_handling=True,
               lemmatize=True,
               reduce_lengthenings=True,
-              segment_words=False,
-              correct_spelling=False
+              segment_words=True,
+              correct_spelling=True
              )
 
 
 print("Loading training data")
 df_a = pd.read_csv('start-kit/training-v1/offenseval-training-v1.tsv', sep='\t')
-df_a_trial = pd.read_csv('start-kit/trial-data/offenseval-trial.txt', sep='\t',names=['id','tweet','subtask_a','subtask_b', 'subtask_c', ])
+df_a_trial = pd.read_csv('start-kit/trial-data/offenseval-trial.txt', sep='\t')#,names=['id','tweet','subtask_a','subtask_b', 'subtask_c', ])
 print("Done!")
 print("Preprocessing...")
 
-X = df_a.tweet.apply(lambda x: process_tweet(x, **params, trial=False, sym_spell=None)).values
+X = df_a['tweet'].apply(lambda x: process_tweet(x, **params, trial=False)).values
 y = df_a['subtask_a'].replace({'OFF': 1, 'NOT': 0}).values
 class_weights = sklearn.utils.class_weight.compute_class_weight('balanced', np.unique(y), y.reshape(-1))
 
@@ -182,6 +182,18 @@ ax.hist(sentence_lengths, bins=list(range(70)))
 ax.tick_params(labelsize=20)
 fig.savefig("sentence_lenghts.pdf", bbox_inches="tight")
 
+# SET HYPERPARAMETERS
+LR               = 0.004
+LR_DECAY         = 0
+EPOCHS           = 20
+BATCH_SIZE       = 32
+EMBEDDING_DIM    = embed_size
+DROPOUT          = 0.4         # Connection drop ratio for CNN to LSTM dropout
+LSTM_DROPOUT     = 0.0         # Connection drop ratio for gate-specific dropout
+BIDIRECTIONAL    = True
+RECURRENT_UNITS  = 100
+train_embeddings = not use_pretrained_embeddings
+
 #########################################################################################
 # 3. BUILD AND TRAIN THE MODEL                                                          #
 #########################################################################################
@@ -218,7 +230,7 @@ class ROC_F1(Callback):
                                                                                                                       auc_val, f1_val))
         print("\n\n")
 
-def build_Bi_GRU_LSTM_CN_model(lr=0.001, lr_decay=0.01, recurrent_units=0, dropout=0.0):
+def build_Bi_GRU_LSTM_CN_model(lr=LR, lr_decay=LR_DECAY, recurrent_units=RECURRENT_UNITS, dropout=DROPOUT):
     # Model architecture
     inputs = Input(shape=(max_seq_len,), name="Input")
 
@@ -280,148 +292,152 @@ def build_LSTM_CNN():
     model.add(Dense(1, activation='sigmoid'))
 
     return model, 0
+import inspect
+print(inspect.signature(build_Bi_GRU_LSTM_CN_model))
 
-# SET HYPERPARAMETERS
-LR               = 0.004
-LR_DECAY         = 0
-EPOCHS           = 20
-BATCH_SIZE       = 32
-EMBEDDING_DIM    = embed_size
-DROPOUT          = 0.4         # Connection drop ratio for CNN to LSTM dropout
-LSTM_DROPOUT     = 0.0         # Connection drop ratio for gate-specific dropout
-BIDIRECTIONAL    = True
-RECURRENT_UNITS  = 100
-train_embeddings = not use_pretrained_embeddings
-# ----------------------
+def doit(model, embed_idx, type=0):
+
+    # ----------------------
 
 
-# BUILD MODEL
-# - Select which architecture to use (simple LSTM works well)
-model, embed_idx = build_LSTM()
+    # BUILD MODEL
+    # - Select which architecture to use (simple LSTM works well)
+
+    # OPTIMIZER | COMPILE | EMBEDDINGS
+    optim = optimizers.Adam(lr=LR, decay=LR_DECAY)
+    model.compile(loss='binary_crossentropy', optimizer=optim, metrics=['accuracy'])
+    if use_pretrained_embeddings:
+        model.layers[embed_idx].set_weights([embedding_matrix])
+    model.summary()
+
+    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, stratify=y)
+
+    class_weights = sklearn.utils.class_weight.compute_class_weight('balanced', np.unique(y_train), y_train.reshape(-1))
+    weights_dict = dict()
+    for i, weight in enumerate(class_weights):
+        weights_dict[i] = weight
+    print("Class weights (to address dataset imbalance):")
+
+    # FIT THE MODEL ------------------------------------------------------------------------------------------------
+    auc_f1 = ROC_F1(validation_data=(X_val, y_val), training_data=(X_train, y_train), interval=1)
+    earlystop = EarlyStopping(monitor='val_loss', patience=15, verbose=1, mode='auto', restore_best_weights=True)
+    filepath = "weights-improvement-{epoch:02d}-{val_acc:.5f}-{val_loss:.5f}.hdf5"
+    checkpoint = ModelCheckpoint(filepath, save_best_only=True, monitor='val_loss', verbose=1, mode='min')
+
+    train_history = model.fit(X_train, y_train, validation_data=(X_val, y_val), batch_size=BATCH_SIZE, epochs=EPOCHS,
+                            verbose=1, class_weight=class_weights, callbacks=[earlystop, checkpoint, auc_f1])
+    model.save(f"taskA_model_{type}.h5")
+    # ---------------------------------------------------------------------------------------------------------------
+
+
+    #########################################################################################
+    # 4. EVALUATE MODEL (LOSS PROFILE, F1-SCORES, CONFUSION MATRIX, AUC,                    #
+    #########################################################################################
+    height = 3.5
+    width = height * 4
+    n_epochs = 40
+    # n_epochs = len(train_history.history['loss'])
+
+    # Plot Loss
+    plt.figure(figsize=(width,height))
+    plt.plot(train_history.history['loss'], label="Train Loss")
+    plt.plot(train_history.history['val_loss'], label="Validation Loss")
+    plt.xlim([0,n_epochs-1]); plt.xticks(list(range(n_epochs)));   plt.grid(True);   plt.legend()
+    plt.title("Loss (Binary Cross-entropy)", fontsize=15)
+    plt.show()
+
+    # Plot accuracy
+    plt.figure(figsize=(width,height))
+    plt.plot(train_history.history['acc'], label="Train Accuracy")
+    plt.plot(train_history.history['val_acc'], label="Validation Accuracy")
+    plt.xlim([0,n_epochs-1]); plt.xticks(list(range(n_epochs)));   plt.grid(True);   plt.legend()
+    plt.title("Accuracy", fontsize=15)
+    plt.show()
+
+    # Plot F1
+    plt.figure(figsize=(width, height))
+    plt.plot(auc_f1.f1s_train, label="Train F1")
+    plt.plot(auc_f1.f1s_val, label="Validation F1")
+    plt.xlim([0, n_epochs - 1]);
+    plt.xticks(list(range(n_epochs)));
+    plt.grid(True);
+    plt.legend()
+    plt.title("F1-score", fontsize=15)
+    plt.show()
+
+    # Plot ROC AUC
+    plt.figure(figsize=(width, height))
+    plt.plot(auc_f1.aucs_train, label="Train ROC AUC")
+    plt.plot(auc_f1.aucs_val, label="Validation ROC AUC")
+    plt.xlim([0, n_epochs - 1]);
+    plt.xticks(list(range(n_epochs)));
+    plt.grid(True);
+    plt.legend()
+    plt.legend()
+    plt.title("ROC AUC", fontsize=15)
+    plt.show()
+
+
+    def plot_confusion_matrix(cm, classes,
+                            normalize=False,
+                            title='Confusion matrix',
+                            cmap=plt.cm.Blues):
+        """
+        This function prints and plots the confusion matrix.
+        Normalization can be applied by setting `normalize=True`.
+        """
+        if normalize:
+            cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+            print("Normalized confusion matrix")
+        else:
+            print('Confusion matrix, without normalization')
+
+        print(cm)
+
+        plt.imshow(cm, interpolation='nearest', cmap=cmap)
+        plt.title(title)
+        plt.colorbar()
+        tick_marks = np.arange(len(classes))
+        plt.xticks(tick_marks, classes, rotation=45)
+        plt.yticks(tick_marks, classes)
+
+        fmt = '.2f' if normalize else 'd'
+        thresh = cm.max() / 2.
+        for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+            plt.text(j, i, format(cm[i, j], fmt),
+                    horizontalalignment="center",
+                    color="white" if cm[i, j] > thresh else "black")
+
+        plt.ylabel('True label')
+        plt.xlabel('Predicted label')
+        plt.tight_layout()
+
+    X_eval = X_trial
+    y_eval = y_trial
+
+    y_pred = model.predict(X_eval)
+    y_pred = np.round(y_pred)
+    print("Validation Accuracy: {:0.2f}%".format(np.sum(y_eval == y_pred) / y_eval.shape[0] * 100))
+
+    # cm = confusion_matrix(y_eval, y_pred)
+    # fig = plt.figure(figsize=(10, 10))
+    # plot = plot_confusion_matrix(cm, classes=['NOT-OFFENSIVE', 'OFFENSIVE'], normalize=True, title='Confusion matrix')
+    # plt.show()
+    # print(cm)
+
+    print(classification_report(y_eval, y_pred))
+
+
+
+modelfuncs = [build_Bi_GRU_LSTM_CN_model, build_CNN_LSTM, build_LSTM_CNN,  build_LSTM, ]
+for func,i in zip(modelfuncs, range(len(modelfuncs))):
+    model, embed_idx = func()
+    sig = inspect.signature(func)
+    print(sig)
+    doit(model, embed_idx, i)
+
+# model, embed_idx =
+
 # model, embed_idx = build_CNN_LSTM()
 # model, embed_idx = build_LSTM_CNN()
 # model, embed_idx = build_Bi_GRU_LSTM_CN_model(LR, LR_DECAY, RECURRENT_UNITS, DROPOUT)
-
-# OPTIMIZER | COMPILE | EMBEDDINGS
-optim = optimizers.Adam(lr=LR, decay=LR_DECAY)
-model.compile(loss='binary_crossentropy', optimizer=optim, metrics=['accuracy'])
-if use_pretrained_embeddings:
-    model.layers[embed_idx].set_weights([embedding_matrix])
-model.summary()
-
-X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, stratify=y)
-
-class_weights = sklearn.utils.class_weight.compute_class_weight('balanced', np.unique(y_train), y_train.reshape(-1))
-weights_dict = dict()
-for i, weight in enumerate(class_weights):
-    weights_dict[i] = weight
-print("Class weights (to address dataset imbalance):")
-
-# FIT THE MODEL ------------------------------------------------------------------------------------------------
-auc_f1 = ROC_F1(validation_data=(X_val, y_val), training_data=(X_train, y_train), interval=1)
-earlystop = EarlyStopping(monitor='val_loss', patience=15, verbose=1, mode='auto', restore_best_weights=True)
-filepath = "weights-improvement-{epoch:02d}-{val_acc:.5f}-{val_loss:.5f}.hdf5"
-checkpoint = ModelCheckpoint(filepath, save_best_only=True, monitor='val_loss', verbose=1, mode='min')
-
-train_history = model.fit(X_train, y_train, validation_data=(X_val, y_val), batch_size=BATCH_SIZE, epochs=EPOCHS,
-                          verbose=1, class_weight=class_weights, callbacks=[earlystop, checkpoint, auc_f1])
-model.save("taskA_model.h5")
-# ---------------------------------------------------------------------------------------------------------------
-
-
-#########################################################################################
-# 4. EVALUATE MODEL (LOSS PROFILE, F1-SCORES, CONFUSION MATRIX, AUC,                    #
-#########################################################################################
-height = 3.5
-width = height * 4
-n_epochs = 40
-# n_epochs = len(train_history.history['loss'])
-
-# Plot Loss
-plt.figure(figsize=(width,height))
-plt.plot(train_history.history['loss'], label="Train Loss")
-plt.plot(train_history.history['val_loss'], label="Validation Loss")
-plt.xlim([0,n_epochs-1]); plt.xticks(list(range(n_epochs)));   plt.grid(True);   plt.legend()
-plt.title("Loss (Binary Cross-entropy)", fontsize=15)
-plt.show()
-
-# Plot accuracy
-plt.figure(figsize=(width,height))
-plt.plot(train_history.history['acc'], label="Train Accuracy")
-plt.plot(train_history.history['val_acc'], label="Validation Accuracy")
-plt.xlim([0,n_epochs-1]); plt.xticks(list(range(n_epochs)));   plt.grid(True);   plt.legend()
-plt.title("Accuracy", fontsize=15)
-plt.show()
-
-# Plot F1
-plt.figure(figsize=(width, height))
-plt.plot(auc_f1.f1s_train, label="Train F1")
-plt.plot(auc_f1.f1s_val, label="Validation F1")
-plt.xlim([0, n_epochs - 1]);
-plt.xticks(list(range(n_epochs)));
-plt.grid(True);
-plt.legend()
-plt.title("F1-score", fontsize=15)
-plt.show()
-
-# Plot ROC AUC
-plt.figure(figsize=(width, height))
-plt.plot(auc_f1.aucs_train, label="Train ROC AUC")
-plt.plot(auc_f1.aucs_val, label="Validation ROC AUC")
-plt.xlim([0, n_epochs - 1]);
-plt.xticks(list(range(n_epochs)));
-plt.grid(True);
-plt.legend()
-plt.legend()
-plt.title("ROC AUC", fontsize=15)
-plt.show()
-
-
-def plot_confusion_matrix(cm, classes,
-                          normalize=False,
-                          title='Confusion matrix',
-                          cmap=plt.cm.Blues):
-    """
-    This function prints and plots the confusion matrix.
-    Normalization can be applied by setting `normalize=True`.
-    """
-    if normalize:
-        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-        print("Normalized confusion matrix")
-    else:
-        print('Confusion matrix, without normalization')
-
-    print(cm)
-
-    plt.imshow(cm, interpolation='nearest', cmap=cmap)
-    plt.title(title)
-    plt.colorbar()
-    tick_marks = np.arange(len(classes))
-    plt.xticks(tick_marks, classes, rotation=45)
-    plt.yticks(tick_marks, classes)
-
-    fmt = '.2f' if normalize else 'd'
-    thresh = cm.max() / 2.
-    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
-        plt.text(j, i, format(cm[i, j], fmt),
-                 horizontalalignment="center",
-                 color="white" if cm[i, j] > thresh else "black")
-
-    plt.ylabel('True label')
-    plt.xlabel('Predicted label')
-    plt.tight_layout()
-
-X_eval = X_trial
-y_eval = y_trial
-
-y_pred = model.predict(X_eval)
-y_pred = np.round(y_pred)
-print("Validation Accuracy: {:0.2f}%".format(np.sum(y_eval == y_pred) / y_eval.shape[0] * 100))
-
-cm = confusion_matrix(y_eval, y_pred)
-fig = plt.figure(figsize=(10, 10))
-plot = plot_confusion_matrix(cm, classes=['NOT-OFFENSIVE', 'OFFENSIVE'], normalize=True, title='Confusion matrix')
-plt.show()
-# print(cm)
-
-print(classification_report(y_eval, y_pred))

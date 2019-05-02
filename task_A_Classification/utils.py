@@ -3,19 +3,27 @@ import html
 import re
 import string
 from random import shuffle
-
+from pathlib import Path
 import nltk
 import numpy as np
 from nltk.corpus import stopwords
 from nltk.stem.wordnet import WordNetLemmatizer
 from nltk.tokenize import TweetTokenizer, word_tokenize
 from sklearn.metrics import f1_score, roc_auc_score
-from symspellpy.symspellpy import SymSpell, Verbosity
+from symspellpy import SymSpell, Verbosity
 from tensorflow.keras.callbacks import Callback
+from nltk.corpus import wordnet as wm
+
 
 nltk.download('wordnet')
 nltk.download('stopwords')
-
+sym_spell = SymSpell(max_dictionary_edit_distance=2, prefix_length=7,
+                 count_threshold=1, compact_level=0)
+# if create_dict:
+sym_spell.words
+sym_spell.create_dictionary(Path('english_words_479k.txt'))
+# else:
+    # sym_spell.load_dictionary(Path('./frequency_dictionary_en_82_765.txt'), 0,1)
 
 def process_tweet(tweet,
                   remove_USER_URL=True,
@@ -26,11 +34,12 @@ def process_tweet(tweet,
                   appostrophe_handling=True,
                   lemmatize=True,
                   trial=False,
-                  sym_spell=None,
                   reduce_lengthenings=True,
                   segment_words=True,
                   correct_spelling=True,
+                  create_dict=True
                   ):
+
     """
     This function receives tweets and returns clean word-list
     """
@@ -97,7 +106,7 @@ def process_tweet(tweet,
         tweet = tweet.translate(translator)
 
     # Tokenize sentence for further word-level processing
-    tokenizer = TweetTokenizer()
+    tokenizer = TweetTokenizer(preserve_case=False, reduce_len=True, strip_handles=True)
     words = tokenizer.tokenize(tweet)
 
     ### Apostrophe handling:    you're   -> you are  ########################
@@ -122,32 +131,32 @@ def process_tweet(tweet,
         lemmatizer = WordNetLemmatizer()
         words = [lemmatizer.lemmatize(word, "v") for word in words]
 
-    ### Remove stop words:      is, that, the, ... ##########################
-    if remove_stopwords:
-        eng_stopwords = set(stopwords.words("english"))
-        words = [w for w in words if not w in eng_stopwords]
-
     ### Reduce lengthening:    aaaaaaaaah -> aah, bleeeeerh -> bleerh #################
     if reduce_lengthenings:
         pattern = re.compile(r"(.)\1{2,}")
         words = [pattern.sub(r"\1\1", w) for w in words]
 
-    if sym_spell and (segment_words or correct_spelling):
 
-        ### Segment words:    thecatonthemat -> the cat on the mat ####################
-        if segment_words:
-            words = [sym_spell.word_segmentation(word).corrected_string for word in words]
 
-        ### Correct spelling: birberals -> liberals ######################
-        if correct_spelling:
-            def correct_spelling_for_word(word):
-                suggestions = sym_spell.lookup(word, Verbosity.TOP, 2)
+    ### Segment words:    thecatonthemat -> the cat on the mat ####################
+    if segment_words:
+        words = [sym_spell.word_segmentation(word).corrected_string for word in words]
 
-                if len(suggestions) > 0:
-                    return suggestions[0].term
-                return word
+    ### Correct spelling: birberals -> liberals ######################
+    if correct_spelling:
+        def correct_spelling_for_word(word):
+            suggestions = sym_spell.lookup(word, Verbosity.TOP, 2)
 
-            words = [correct_spelling_for_word(word) for word in words]
+            if len(suggestions) > 0:
+                return suggestions[0].term
+            return word
+
+        words = [correct_spelling_for_word(word) for word in words]
+    ### Remove stop words:      is, that, the, ... ##########################
+    #### IMPORTANT TO DO THIS LAST SINCE WE MAY MISS SOME WORDS AFTER THEY ARE CLEANED!!#####
+    if remove_stopwords:
+        eng_stopwords = stopwords.words("english")
+        words = set([w for w in words if not w in eng_stopwords])
 
     clean_tweet = " ".join(words)
     clean_tweet = re.sub("  ", " ", clean_tweet)
