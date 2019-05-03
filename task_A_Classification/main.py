@@ -150,8 +150,8 @@ else:
 class_weights = sklearn.utils.class_weight.compute_class_weight('balanced', np.unique(train_label), train_label.reshape(-1))
 from contextlib import redirect_stdout
 def tweet_process_stats(cleantrain=df_a, cleantrial= df_a_trial, pretrain=preclean_train, pretrial=preclean_trial):
-    untrained= pd.DataFrame.from_csv(pretrain,sep='\t')
-    untrailed= pd.DataFrame.from_csv(pretrial,sep='\t')
+    untrained= pd.read_csv(pretrain,sep='\t',)
+    untrialed= pd.read_csv(pretrial,sep='\t')
     with open('tweet_comparison_stats.log','w') as f:
         with redirect_stdout(f):
             print("EXAMPLES OF PROCESSED TWEETS [train/trial]")
@@ -163,7 +163,7 @@ def tweet_process_stats(cleantrain=df_a, cleantrial= df_a_trial, pretrain=precle
                 print("")
             print("_________________________________________________________________________________________________________")
             for id in range(10, 15):
-                print("Un-processed:  " + untrailed['tweet'][id])
+                print("Un-processed:  " + untrialed['tweet'][id])
                 print("Processed:     " + cleantrial['tweet'][id])
                 print("")
 tweet_process_stats()
