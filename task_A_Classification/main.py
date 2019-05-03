@@ -142,7 +142,7 @@ print("Done!")
 if not skip_cleaning:
     print("Preprocessing...")
 
-    newdata = threaded_process_tweets(df_a[['id','tweet']], params, trial=False)#df_a['tweet'].apply(lambda x: process_tweet(x, **params, trial=False))
+    newdata = threaded_process_tweets(df_a[['id','tweet']], params)#df_a['tweet'].apply(lambda x: process_tweet(x, **params, trial=False))
     merge = newdata.merge(df_a, on=['id'],suffixes=('','_dirty'))
     merge = merge.drop(columns=['tweet_dirty'])
     df_a = merge
