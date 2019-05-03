@@ -148,24 +148,24 @@ else:
     if balance_dataset:
         train_tweet, train_label = under_sample(train_tweet, train_label)
 class_weights = sklearn.utils.class_weight.compute_class_weight('balanced', np.unique(train_label), train_label.reshape(-1))
+from contextlib import redirect_stdout
 def tweet_process_stats(cleantrain=df_a, cleantrial= df_a_trial, pretrain=preclean_train, pretrial=preclean_trial):
     untrained= pd.DataFrame.from_csv(pretrain,sep='\t')
     untrailed= pd.DataFrame.from_csv(pretrial,sep='\t')
     with open('tweet_comparison_stats.log','w') as f:
-        def _print(str):
-            print(str, file=f)
-        _print("EXAMPLES OF PROCESSED TWEETS [train/trial]")
-        _print()
-        _print("_________________________________________________________________________________________________________")
-        for id in range(10, 15):
-            _print("Un-processed:  " + untrained['tweet'][id])
-            _print("Processed:     " + cleantrain['tweet'][id])
-            _print("")
-        _print("_________________________________________________________________________________________________________")
-        for id in range(10, 15):
-            _print("Un-processed:  " + untrailed['tweet'][id])
-            _print("Processed:     " + cleantrial['tweet'][id])
-            _print("")
+        with redirect_stdout(f):
+            print("EXAMPLES OF PROCESSED TWEETS [train/trial]")
+            print()
+            print("_________________________________________________________________________________________________________")
+            for id in range(10, 15):
+                print("Un-processed:  " + untrained['tweet'][id])
+                print("Processed:     " + cleantrain['tweet'][id])
+                print("")
+            print("_________________________________________________________________________________________________________")
+            for id in range(10, 15):
+                print("Un-processed:  " + untrailed['tweet'][id])
+                print("Processed:     " + cleantrial['tweet'][id])
+                print("")
 tweet_process_stats()
 #########################################################################################
 # 3. BUILD VOCABULARY FROM FULL CORPUS AND PREPARE INPUT                                #
