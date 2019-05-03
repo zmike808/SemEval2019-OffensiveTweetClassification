@@ -12,13 +12,13 @@ from nltk.tokenize import TweetTokenizer, word_tokenize
 from sklearn.metrics import f1_score, roc_auc_score
 from symspellpy import SymSpell, Verbosity
 from tensorflow.keras.callbacks import Callback
-from nltk.corpus import wordnet as wm
-
+from nltk.corpus import *
+from nltk.corpus.reader.wordnet import *
 
 nltk.download('wordnet')
 nltk.download('stopwords')
 sym_spell = SymSpell(max_dictionary_edit_distance=2, prefix_length=7,
-                 count_threshold=1, compact_level=5)
+                 count_threshold=1, compact_level=0)
 
 
 
@@ -27,6 +27,7 @@ sym_spell = SymSpell(max_dictionary_edit_distance=2, prefix_length=7,
 sym_spell.load_dictionary(Path('./frequency_dictionary_en_82_765.txt'), 0,1)
 
 def process_tweet(tweet,
+                  require_id=False,
                   remove_USER_URL=True,
                   remove_punctuation=True,
                   remove_stopwords=True,
@@ -40,7 +41,9 @@ def process_tweet(tweet,
                   correct_spelling=True,
                   create_dict=True
                   ):
-
+    if type(tweet) is not str():
+        id = tweet[0]
+        tweet = tweet[1]
 
     """
     This function receives tweets and returns clean word-list
@@ -130,8 +133,18 @@ def process_tweet(tweet,
 
     ### Lemmatisation:          drinking -> drink ###########################
     if lemmatize:
-        lemmatizer = WordNetLemmatizer()
-        words = [lemmatizer.lemmatize(word, "v") for word in words]
+        wordnet_corpora = nltk.data.find('corpora/wordnet')
+        omwReader = LazyCorpusLoader('omw', nltk.corpus.reader.CorpusReader, r'.*/wn-data-.*\.tab', encoding='utf8')
+        wnr = WordNetCorpusReader(wordnet_corpora, omwReader)
+        wnr.ensure_loaded()
+        lemmed = []
+        for word in words:
+            w = wnr.morphy(word)
+            if w:
+                lemmed.append(w)
+            else:
+                lemmed.append(word)
+        words = lemmed
 
     ### Reduce lengthening:    aaaaaaaaah -> aah, bleeeeerh -> bleerh #################
     if reduce_lengthenings:
@@ -163,7 +176,8 @@ def process_tweet(tweet,
     clean_tweet = " ".join(words)
     clean_tweet = re.sub("  ", " ", clean_tweet)
     clean_tweet = clean_tweet.lower()
-
+    if require_id:
+        return [id, clean_tweet]
     return clean_tweet
 
 def under_sample(X, y):

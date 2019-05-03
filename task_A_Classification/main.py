@@ -24,8 +24,11 @@ import time
 import pickle
 from pathlib import Path
 import matplotlib.pyplot as plt
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
+import concurrent.futures
 from sklearn.model_selection import train_test_split
-
+import threading
 # NLP
 import re
 import string
@@ -84,6 +87,22 @@ params = dict(remove_USER_URL=True,
               segment_words=True,
               correct_spelling=True
              )
+def threaded_process_tweets(dataset, kwargs, limit=10, trial=False):
+    tweet_dataset = dataset.values
+    results = []
+    with ProcessPoolExecutor(max_workers=limit) as executor:
+        future_tweets = {executor.submit(process_tweet, tweet, **kwargs, trial=trial): tweet for tweet in tweet_dataset}
+        for future in concurrent.futures.as_completed(future_tweets):
+            result = future.result()
+            results.append(result)
+
+    final = pd.DataFrame(results, columns=['id','tweet'])
+
+
+    return final
+    # print([tweet for tweet in tweet_dataset])
+
+    #               traceback.print_exc()
 
 print("Loading training data")
 train_balanced = Path('train_balanced.csv')
@@ -94,43 +113,55 @@ trial_clean = Path('trial_clean.csv')
 if balance_dataset and train_balanced.exists() and trial_balanced.exists():
     train_data = train_balanced
     trial_data=trial_balanced
+    skip_cleaning=True
 elif train_clean.exists and trial_clean.exists():
     train_data = train_clean
     trial_data=trial_clean
+    skip_cleaning=True
 else:
     train_data = Path('start-kit/training-v1/offenseval-training-v1.tsv')
     trial_data = Path('start-kit/trial-data/offenseval-trial.txt')
+    skip_cleaning=False
 
 df_a = pd.read_csv(train_data, sep='\t')
 df_a_trial = pd.read_csv(trial_data, sep='\t')#,names=['id','tweet','subtask_a','subtask_b', 'subtask_c', ])
 print("Done!")
-print("Preprocessing...")
+if not skip_cleaning:
+    print("Preprocessing...")
 
-df_a.tweet = df_a['tweet'].apply(lambda x: process_tweet(x, **params, trial=False))
-df_a.subtask_a = df_a['subtask_a'].replace({'OFF': 1, 'NOT': 0})
+    newdata = threaded_process_tweets(df_a[['id','tweet']], params, trial=False)#df_a['tweet'].apply(lambda x: process_tweet(x, **params, trial=False))
+    df_a.update(newdata)
 
-train_tweet = df_a.tweet.values
-train_label = df_a.subtask_a.values
+    df_a['subtask_a'] = df_a['subtask_a'].replace({'OFF': 1, 'NOT': 0})
 
-class_weights = sklearn.utils.class_weight.compute_class_weight('balanced', np.unique(train_label), train_label.reshape(-1))
+    train_tweet = df_a['tweet'].values
+    train_label = df_a['subtask_a'].values
 
-df_a_trial['tweet'] = df_a_trial['tweet'].apply(lambda x: process_tweet(x, **params, trial=True))
-df_a_trial['subtask_a'] = df_a_trial['subtask_a'].replace({'OFF': 1, 'NOT': 0})
+    newdata = threaded_process_tweets(df_a_trial[['id','tweet']], params, trial=False)#df_a['tweet'].apply(lambda x: process_tweet(x, **params, trial=False))
+    df_a_trial.update(newdata)
+    df_a_trial['subtask_a'] = df_a_trial['subtask_a'].replace({'OFF': 1, 'NOT': 0})
 
-trial_tweet = df_a_trial['tweet'].values
-trial_label = df_a_trial['subtask_a'].values
+    trial_tweet = df_a_trial['tweet'].values
+    trial_label = df_a_trial['subtask_a'].values
 
-print("Done!")
+    print("Done!")
 
-if balance_dataset:
-    df_a.to_csv(train_clean)
-    df_a_trial.to_csv(trial_clean)
-    train_tweet, train_label = under_sample(train_tweet, train_label)
-    df_a.to_csv(train_balanced)
-    df_a_trial.to_csv(trial_balanced)
+    if balance_dataset:
+        df_a.to_csv(train_clean, columns=['id', 'tweet','subtask_a'])
+        df_a_trial.to_csv(trial_clean, columns=['id','tweet','subtask_a'])
+        train_tweet, train_label = under_sample(train_tweet, train_label)
+        df_a.to_csv(train_balanced, columns=['id','tweet','subtask_a'])
+        df_a_trial.to_csv(trial_balanced, columns=['id','tweet','subtask_a'])
+    else:
+        df_a.to_csv(train_clean, columns=['id','tweet','subtask_a'])
+        df_a_trial.to_csv(trial_clean, columns=['id','tweet','subtask_a'])
 else:
-    df_a.to_csv(train_clean)
-    df_a_trial.to_csv(trial_clean)
+    print(df_a['tweet'].head())
+    train_tweet = df_a['tweet'].values
+    train_label = df_a['subtask_a'].values
+    trial_tweet = df_a_trial['tweet'].values
+    trial_label = df_a_trial['subtask_a'].values
+class_weights = sklearn.utils.class_weight.compute_class_weight('balanced', np.unique(train_label), train_label.reshape(-1))
 
 # print("EXAMPLES OF PROCESSED TWEETS [train/trial]")
 # print("_________________________________________________________________________________________________________")
