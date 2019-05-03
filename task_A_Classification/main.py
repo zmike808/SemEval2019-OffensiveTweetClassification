@@ -135,9 +135,18 @@ else:
     trial_data = Path('start-kit/trial-data/offenseval-trial.txt')
     skip_cleaning=False
 
-df_a = pd.read_csv(train_data, sep='\t').drop(inplace=False,columns=['subtask_b', 'subtask_c'])
-df_a_trial = pd.read_csv(trial_data, sep='\t').drop(inplace=False,columns=['subtask_b', 'subtask_c'])#,names=['id','tweet','subtask_a','subtask_b', 'subtask_c', ])
-print(df_a.head())
+try:
+    dropped = df_a.drop(inplace=False,columns=['subtask_b', 'subtask_c'])
+    df_a = dropped
+except:
+    pass
+df_a_trial = pd.read_csv(trial_data, sep='\t')
+try:
+    dropped = df_a_trial.drop(inplace=False,columns=['subtask_b', 'subtask_c'])
+    df_a_trial = dropped
+except:
+    pass
+
 print("Done!")
 if not skip_cleaning:
     print("Preprocessing...")
@@ -154,7 +163,9 @@ if not skip_cleaning:
     #trial set is so small that theresno need to parallel
     df_a_trial['tweet'].apply(lambda x: process_tweet(x, **params, trial=True))
     df_a_trial['subtask_a'] = df_a_trial['subtask_a'].replace({'OFF': 1, 'NOT': 0})
-
+    print(len(df_a_trial))
+    df_a_trial = df_a_trial.dropna()
+    print(len(df_a_trial))
     trial_tweet = df_a_trial['tweet'].values
     trial_label = df_a_trial['subtask_a'].values
 

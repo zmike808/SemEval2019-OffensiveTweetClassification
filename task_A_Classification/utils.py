@@ -6,6 +6,7 @@ from random import shuffle
 from pathlib import Path
 import nltk
 import numpy as np
+import pandas as pd
 from nltk.corpus import stopwords
 from nltk.stem.wordnet import WordNetLemmatizer
 from nltk.tokenize import TweetTokenizer, word_tokenize
@@ -184,7 +185,7 @@ def process_tweet(data,
     print(f'cleaning trial data {trial}:{clean_tweet}')
     if len(clean_tweet) < 1:
         print('empty tweet, returning None!')
-        return None
+        return pd.NaT
 
     return clean_tweet
 
