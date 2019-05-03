@@ -484,7 +484,6 @@ def doit(model, embed_idx, type=0):
 modelfuncs = [build_Bi_GRU_LSTM_CN_model, build_CNN_LSTM, build_LSTM_CNN,  build_LSTM, ]
 for func,i in zip(modelfuncs, range(len(modelfuncs))):
     model, embed_idx = func()
-    print(sig)
     doit(model, embed_idx, i)
 
 # model, embed_idx =
