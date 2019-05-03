@@ -179,14 +179,6 @@ def process_tweet(data,
     clean_tweet = re.sub("  ", " ", clean_tweet)
     clean_tweet = clean_tweet.lower()
 
-    # if not trial:
-    print(f"Finished tweet : {clean_tweet}")
-        # return [id, clean_tweet]
-    # print(f'cleaning trial data {trial}:{clean_tweet}')
-    # if len(clean_tweet) < 1:
-        # print('empty tweet, returning None!')
-        # return
-
     return clean_tweet
 
 
