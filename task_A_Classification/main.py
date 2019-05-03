@@ -149,8 +149,8 @@ else:
         train_tweet, train_label = under_sample(train_tweet, train_label)
 class_weights = sklearn.utils.class_weight.compute_class_weight('balanced', np.unique(train_label), train_label.reshape(-1))
 def tweet_process_stats(cleantrain=df_a, cleantrial= df_a_trial, pretrain=preclean_train, pretrial=preclean_trial):
-    untrained= pd.from_csv(pretrain)
-    untrailed= pd.from_csv(pretrial)
+    untrained= pd.DataFrame.from_csv(pretrain,sep='\t')
+    untrailed= pd.DataFrame.from_csv(pretrial,sep='\t')
     with open('tweet_comparison_stats.log','w') as f:
         def _print(str):
             print(str, file=f)
