@@ -93,33 +93,27 @@ params = dict(remove_USER_URL=True,
 def process_tweet_trial(tweet_data):
     return process_tweet(tweet_data, trial=True)
 
-def threaded_process_tweets(dataset, kwargs, limit=48, trial=False) -> pd.DataFrame:
+def threaded_process_tweets(dataset, kwargs, limit=48) -> pd.DataFrame:
     tweet_dataset = dataset.values
 
-
-    if trial:
-        target = process_tweet_trial
-    else:
-        target = process_tweet
     picklefile = Path(f'csv_results_tmp.{trial}.pkl')
-    print(picklefile, picklefile.exists())
 
     results = []
     if not picklefile.exists():
         with Pool() as pool:
             chunksize=1#int(multiprocessing.cpu_count()*5)
-            results = pool.map(target, tweet_dataset, chunksize=chunksize)
+            results = pool.map(process_tweet, tweet_dataset, chunksize=chunksize)
             with open(picklefile, "wb") as f:
                 pickle.dump(results, f)
 
     with open(picklefile,'rb') as f:
         results = pickle.load(f)
-    print(len(results), len(dataset))
+
     removed_empty = [x for x in results if len(x[1])]
     emptylists = [x for x in results if not len(x[1])]
 
     results = removed_empty
-    print(results[0],results[-1])
+    print(results[0], len(results), len(emptylists))
     final = pd.DataFrame(results, columns=['id','tweet']).drop_duplicates(subset=['tweet'])
     return final
     # print([tweet for tweet in tweet_dataset])
@@ -127,16 +121,12 @@ def threaded_process_tweets(dataset, kwargs, limit=48, trial=False) -> pd.DataFr
     #               traceback.print_exc()
 
 print("Loading training data")
-train_balanced = Path('train_balanced.csv')
-trial_balanced = Path('trial_balanced.csv')
+# train_balanced = Path('train_balanced.csv')
+# trial_balanced = Path('trial_balanced.csv')
 train_clean = Path('train_clean.csv')
 trial_clean = Path('trial_clean.csv')
 
-if balance_dataset and train_balanced.exists() and trial_balanced.exists():
-    train_data = train_balanced
-    trial_data=trial_balanced
-    skip_cleaning=True
-elif train_clean.exists and trial_clean.exists():
+if train_clean.exists and trial_clean.exists():
     train_data = train_clean
     trial_data=trial_clean
     skip_cleaning=True
@@ -153,48 +143,34 @@ if not skip_cleaning:
     print("Preprocessing...")
 
     newdata = threaded_process_tweets(df_a[['id','tweet']], params, trial=False)#df_a['tweet'].apply(lambda x: process_tweet(x, **params, trial=False))
-    print('updating....')
-    # df_a.update() (newdata)
-    # print(len(df_a), len(newdata))
-    # print(df_a.head(), newdata.head(), df_a.head(-1), newdata.head(-1))
-    # newdata.update(df_a[['id','subtask_a']])
     merge = newdata.merge(df_a, on=['id'],suffixes=('','_dirty'))
     merge = merge.drop(columns=['tweet_dirty'])
-
     df_a = merge
-    # df_a.dropna(inplace=True)
-    # print(df_a.head(), newdata.head(), df_a.head(-1), newdata.head(-1))
     df_a['subtask_a'] = df_a['subtask_a'].replace({'OFF': 1, 'NOT': 0})
 
     train_tweet = df_a['tweet'].values
     train_label = df_a['subtask_a'].values
 
-    newdata = threaded_process_tweets(df_a_trial[['id','tweet']], params, trial=True)#df_a['tweet'].apply(lambda x: process_tweet(x, **params, trial=False))
-    merge = newdata.merge(df_a, on=['id'],suffixes=('','_dirty'))
-    merge = merge.drop(columns=['tweet_dirty'])
-    df_a_trial = merge
+    #trial set is so small that theresno need to parallel
+    df_a_trial['tweet'].apply(lambda x: process_tweet(x, **params, trial=True))
     df_a_trial['subtask_a'] = df_a_trial['subtask_a'].replace({'OFF': 1, 'NOT': 0})
 
     trial_tweet = df_a_trial['tweet'].values
     trial_label = df_a_trial['subtask_a'].values
 
     print("Done!")
-
+    df_a.to_csv(train_clean, columns=['id', 'tweet','subtask_a'])
+    df_a_trial.to_csv(trial_clean, columns=(['tweet','subtask_a']))
     if balance_dataset:
-        df_a.to_csv(train_clean, columns=['id', 'tweet','subtask_a'])
-        df_a_trial.to_csv(trial_clean, columns=['id','tweet','subtask_a'])
         train_tweet, train_label = under_sample(train_tweet, train_label)
-        df_a.to_csv(train_balanced, columns=['id','tweet','subtask_a'])
-        df_a_trial.to_csv(trial_balanced, columns=['id','tweet','subtask_a'])
-    else:
-        df_a.to_csv(train_clean, columns=['id','tweet','subtask_a'])
-        df_a_trial.to_csv(trial_clean, columns=['id','tweet','subtask_a'])
 else:
-    print(df_a['tweet'].head())
+    print(df_a.head(5))
     train_tweet = df_a['tweet'].values
     train_label = df_a['subtask_a'].values
     trial_tweet = df_a_trial['tweet'].values
     trial_label = df_a_trial['subtask_a'].values
+    if balance_dataset:
+        train_tweet, train_label = under_sample(train_tweet, train_label)
 class_weights = sklearn.utils.class_weight.compute_class_weight('balanced', np.unique(train_label), train_label.reshape(-1))
 
 # print("EXAMPLES OF PROCESSED TWEETS [train/trial]")
@@ -307,12 +283,12 @@ class ROC_F1(Callback):
         if self.model.optimizer.initial_decay > 0:
             lr = lr * (1. / (1. + self.model.optimizer.decay * K.cast(self.model.optimizer.iterations, K.dtype(self.model.optimizer.decay))))
         if epoch % self.interval == 0:
-            y_pred_train = np.round(self.model.predict(X_train, verbose=0))
+            y_pred_train = np.round(self.model.predict(self.X_train, verbose=0))
             y_pred_val = np.round(self.model.predict(self.X_val, verbose=0))
 
-            auc_train = roc_auc_score(y_train, y_pred_train)
+            auc_train = roc_auc_score(self.y_train, y_pred_train)
             auc_val = roc_auc_score(self.y_val, y_pred_val)
-            f1_train = f1_score(y_train, y_pred_train, average='macro')
+            f1_train = f1_score(self.y_train, y_pred_train, average='macro')
             f1_val = f1_score(self.y_val, y_pred_val, average='macro')
 
             self.aucs_train.append(auc_train)

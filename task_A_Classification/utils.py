@@ -42,7 +42,6 @@ def process_tweet(data,
                   ):
     # print(type(tweet))
     if type(data) is not str():
-
         id = data[0]
         tweet = data[1]
     else:
@@ -66,7 +65,6 @@ def process_tweet(data,
         else:
             tweet = re.sub(r"@USER", "<usertoken>", tweet)
             tweet = re.sub(r"URL", "<urltoken>", tweet)
-
     ### Remove HTML Entiti es #################################################
     if remove_HTMLentities:
         tweet = html.unescape(tweet)
@@ -179,11 +177,17 @@ def process_tweet(data,
     clean_tweet = " ".join(words)
     clean_tweet = re.sub("  ", " ", clean_tweet)
     clean_tweet = clean_tweet.lower()
-    print(f"Finished tweet {id}: {clean_tweet}")
+
     if type(data) is not str():
+        print(f"Finished tweet {id}: {clean_tweet}")
         return [id, clean_tweet]
+    print(f'cleaning trial data {trial}:{clean_tweet}')
+    if len(clean_tweet) < 1:
+        print('empty tweet, returning None!')
+        return None
 
     return clean_tweet
+
 
 def under_sample(X, y):
     idx_0 = np.where(y == 0)[0].tolist()
