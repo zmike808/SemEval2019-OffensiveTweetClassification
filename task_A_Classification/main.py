@@ -134,7 +134,7 @@ else:
     train_data = Path('start-kit/training-v1/offenseval-training-v1.tsv')
     trial_data = Path('start-kit/trial-data/offenseval-trial.txt')
     skip_cleaning=False
-
+df_a = pd.read_csv(train_data, sep='\t')
 try:
     dropped = df_a.drop(inplace=False,columns=['subtask_b', 'subtask_c'])
     df_a = dropped
