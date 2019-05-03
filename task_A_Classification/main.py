@@ -90,9 +90,9 @@ params = dict(remove_USER_URL=True,
               segment_words=True,
               correct_spelling=True
              )
-def threaded_process_tweets(dataset, kwargs, limit=48, trial=False):
+def threaded_process_tweets(dataset, kwargs, limit=48, trial=False) -> pd.DataFrame:
     tweet_dataset = dataset.values
-    results = []
+    # results = pickle.load('csv_results_tmp.pkl')
     def process_tweet_trial(tweet_data):
         return process_tweet(tweet_data, trial=True)
 
@@ -100,17 +100,23 @@ def threaded_process_tweets(dataset, kwargs, limit=48, trial=False):
         target = process_tweet_trial
     else:
         target = process_tweet
-    with Pool() as pool:
-        results = pool.map(target, tweet_dataset, chunksize=multiprocessing.cpu_count())
-    # with ThreadPoolExecutor(max_workers=limit) as executor:
-    #     future_tweets = {executor.submit(process_tweet, tweet, **kwargs, trial=trial): tweet for tweet in tweet_dataset}
-    #     for future in concurrent.futures.as_completed(future_tweets):
-    #         result = future.result()
-    #         results.append(result)
-    with open("csv_results_tmp.pkl", "wb") as f:
-        pickle.dump(results, f)
+    if not Path(f'csv_results_tmp.{trial}.pkl').exists():
+        with Pool() as pool:
+            chunksize=1#int(multiprocessing.cpu_count()*5)
+            results = pool.map(target, tweet_dataset, chunksize=chunksize)
+
+        with open(f"csv_results_tmp.{trial}.pkl", "wb") as f:
+            pickle.dump(results, f)
+
+    with open(f'csv_results_tmp.{trial}.pkl','rb') as f:
+        results = pickle.load(f)
+    print(len(results), len(dataset))
+    removed_empty = [x for x in results if len(x[1])]
+    emptylists = [x for x in results if not len(x[1])]
+    # print(emptylists)
+    results = removed_empty
     print(results[0],results[-1])
-    final = pd.DataFrame(results, columns=['id','tweet'])
+    final = pd.DataFrame(results, columns=['id','tweet']).drop_duplicates(subset=['tweet'])
     return final
     # print([tweet for tweet in tweet_dataset])
 
@@ -135,22 +141,34 @@ else:
     trial_data = Path('start-kit/trial-data/offenseval-trial.txt')
     skip_cleaning=False
 
-df_a = pd.read_csv(train_data, sep='\t')
-df_a_trial = pd.read_csv(trial_data, sep='\t')#,names=['id','tweet','subtask_a','subtask_b', 'subtask_c', ])
+df_a = pd.read_csv(train_data, sep='\t').drop(inplace=False,columns=['subtask_b', 'subtask_c'])
+df_a_trial = pd.read_csv(trial_data, sep='\t').drop(inplace=False,columns=['subtask_b', 'subtask_c'])#,names=['id','tweet','subtask_a','subtask_b', 'subtask_c', ])
+print(df_a.head())
 print("Done!")
 if not skip_cleaning:
     print("Preprocessing...")
 
     newdata = threaded_process_tweets(df_a[['id','tweet']], params, trial=False)#df_a['tweet'].apply(lambda x: process_tweet(x, **params, trial=False))
-    df_a.update(newdata)
+    print('updating....')
+    # df_a.update() (newdata)
+    # print(len(df_a), len(newdata))
+    # print(df_a.head(), newdata.head(), df_a.head(-1), newdata.head(-1))
+    # newdata.update(df_a[['id','subtask_a']])
+    merge = newdata.merge(df_a, on=['id'],suffixes=('','_dirty'))
+    merge = merge.drop(columns=['tweet_dirty'])
 
+    df_a = merge
+    # df_a.dropna(inplace=True)
+    # print(df_a.head(), newdata.head(), df_a.head(-1), newdata.head(-1))
     df_a['subtask_a'] = df_a['subtask_a'].replace({'OFF': 1, 'NOT': 0})
 
     train_tweet = df_a['tweet'].values
     train_label = df_a['subtask_a'].values
 
     newdata = threaded_process_tweets(df_a_trial[['id','tweet']], params, trial=True)#df_a['tweet'].apply(lambda x: process_tweet(x, **params, trial=False))
-    df_a_trial.update(newdata)
+    merge = newdata.merge(df_a, on=['id'],suffixes=('','_dirty'))
+    merge = merge.drop(columns=['tweet_dirty'])
+    df_a_trial = merge
     df_a_trial['subtask_a'] = df_a_trial['subtask_a'].replace({'OFF': 1, 'NOT': 0})
 
     trial_tweet = df_a_trial['tweet'].values
