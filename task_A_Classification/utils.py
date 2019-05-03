@@ -41,7 +41,7 @@ def process_tweet(data,
                   create_dict=True
                   ):
     # print(type(tweet))
-    if type(data) is not str():
+    if not trial:
         id = data[0]
         tweet = data[1]
     else:
@@ -178,7 +178,7 @@ def process_tweet(data,
     clean_tweet = re.sub("  ", " ", clean_tweet)
     clean_tweet = clean_tweet.lower()
 
-    if type(data) is not str():
+    if not trial:
         print(f"Finished tweet {id}: {clean_tweet}")
         return [id, clean_tweet]
     print(f'cleaning trial data {trial}:{clean_tweet}')
