@@ -96,7 +96,7 @@ def process_tweet_trial(tweet_data):
 def threaded_process_tweets(dataset, kwargs, limit=48) -> pd.DataFrame:
     tweet_dataset = dataset.values
 
-    picklefile = Path(f'csv_results_tmp.{trial}.pkl')
+    picklefile = Path(f'csv_results_tmp.pkl')
 
     results = []
     if not picklefile.exists():
@@ -142,7 +142,7 @@ print("Done!")
 if not skip_cleaning:
     print("Preprocessing...")
 
-    newdata = threaded_process_tweets(df_a[['id','tweet']], params, trial=False)#df_a['tweet'].apply(lambda x: process_tweet(x, **params, trial=False))
+    newdata = threaded_process_tweets(df_a[['id','tweet']], params)#df_a['tweet'].apply(lambda x: process_tweet(x, **params, trial=False))
     merge = newdata.merge(df_a, on=['id'],suffixes=('','_dirty'))
     merge = merge.drop(columns=['tweet_dirty'])
     df_a = merge
