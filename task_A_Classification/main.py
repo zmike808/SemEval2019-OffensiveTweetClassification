@@ -138,7 +138,7 @@ if not skip_cleaning:
     trial_label = df_a_trial['subtask_a'].values
 
     print("Done!")
-    df_a.to_csv(train_clean, columns=['id', 'tweet','subtask_a'])
+    df_a.to_csv(train_clean, columns=['tweet','subtask_a'])
     df_a_trial.to_csv(trial_clean, columns=(['tweet','subtask_a']))
 
     if balance_dataset:
@@ -341,8 +341,6 @@ def build_LSTM_CNN():
     model.add(Dense(1, activation='sigmoid'))
 
     return model, 0
-import inspect
-print(inspect.signature(build_Bi_GRU_LSTM_CN_model))
 
 def doit(model, embed_idx, type=0):
 
@@ -393,6 +391,7 @@ def doit(model, embed_idx, type=0):
     plt.plot(train_history.history['val_loss'], label="Validation Loss")
     plt.xlim([0,n_epochs-1]); plt.xticks(list(range(n_epochs)));   plt.grid(True);   plt.legend()
     plt.title("Loss (Binary Cross-entropy)", fontsize=15)
+    plt.savefig(f'LOSS BINARY CROSS ENTROPY-{type}.png')
     plt.show()
 
     # Plot accuracy
@@ -401,6 +400,7 @@ def doit(model, embed_idx, type=0):
     plt.plot(train_history.history['val_acc'], label="Validation Accuracy")
     plt.xlim([0,n_epochs-1]); plt.xticks(list(range(n_epochs)));   plt.grid(True);   plt.legend()
     plt.title("Accuracy", fontsize=15)
+    plt.savefig(f'Accuracy-{type}.png')
     plt.show()
 
     # Plot F1
@@ -412,6 +412,7 @@ def doit(model, embed_idx, type=0):
     plt.grid(True);
     plt.legend()
     plt.title("F1-score", fontsize=15)
+    plt.savefig(f'F1-SCORE-{type}.png')
     plt.show()
 
     # Plot ROC AUC
@@ -424,6 +425,7 @@ def doit(model, embed_idx, type=0):
     plt.legend()
     plt.legend()
     plt.title("ROC AUC", fontsize=15)
+    plt.savefig(f'ROC AUC-{type}.png')
     plt.show()
 
 
@@ -468,11 +470,12 @@ def doit(model, embed_idx, type=0):
     y_pred = np.round(y_pred)
     print("Validation Accuracy: {:0.2f}%".format(np.sum(y_eval == y_pred) / y_eval.shape[0] * 100))
 
-    # cm = confusion_matrix(y_eval, y_pred)
-    # fig = plt.figure(figsize=(10, 10))
-    # plot = plot_confusion_matrix(cm, classes=['NOT-OFFENSIVE', 'OFFENSIVE'], normalize=True, title='Confusion matrix')
-    # plt.show()
-    # print(cm)
+    cm = confusion_matrix(y_eval, y_pred)
+    fig = plt.figure(figsize=(10, 10))
+    plot = plot_confusion_matrix(cm, classes=['NOT-OFFENSIVE', 'OFFENSIVE'], normalize=True, title='Confusion matrix')
+    plt.savefig(f'confusion_matrix-{type}.png')
+    plt.show()
+    print(cm)
 
     print(classification_report(y_eval, y_pred))
 
@@ -481,7 +484,6 @@ def doit(model, embed_idx, type=0):
 modelfuncs = [build_Bi_GRU_LSTM_CN_model, build_CNN_LSTM, build_LSTM_CNN,  build_LSTM, ]
 for func,i in zip(modelfuncs, range(len(modelfuncs))):
     model, embed_idx = func()
-    sig = inspect.signature(func)
     print(sig)
     doit(model, embed_idx, i)
 
