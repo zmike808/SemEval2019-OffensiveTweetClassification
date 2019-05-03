@@ -90,30 +90,34 @@ params = dict(remove_USER_URL=True,
               segment_words=True,
               correct_spelling=True
              )
+def process_tweet_trial(tweet_data):
+    return process_tweet(tweet_data, trial=True)
+
 def threaded_process_tweets(dataset, kwargs, limit=48, trial=False) -> pd.DataFrame:
     tweet_dataset = dataset.values
-    # results = pickle.load('csv_results_tmp.pkl')
-    def process_tweet_trial(tweet_data):
-        return process_tweet(tweet_data, trial=True)
+
 
     if trial:
         target = process_tweet_trial
     else:
         target = process_tweet
-    if not Path(f'csv_results_tmp.{trial}.pkl').exists():
+    picklefile = Path(f'csv_results_tmp.{trial}.pkl')
+    print(picklefile, picklefile.exists())
+
+    results = []
+    if not picklefile.exists():
         with Pool() as pool:
             chunksize=1#int(multiprocessing.cpu_count()*5)
             results = pool.map(target, tweet_dataset, chunksize=chunksize)
+            with open(picklefile, "wb") as f:
+                pickle.dump(results, f)
 
-        with open(f"csv_results_tmp.{trial}.pkl", "wb") as f:
-            pickle.dump(results, f)
-
-    with open(f'csv_results_tmp.{trial}.pkl','rb') as f:
+    with open(picklefile,'rb') as f:
         results = pickle.load(f)
     print(len(results), len(dataset))
     removed_empty = [x for x in results if len(x[1])]
     emptylists = [x for x in results if not len(x[1])]
-    # print(emptylists)
+
     results = removed_empty
     print(results[0],results[-1])
     final = pd.DataFrame(results, columns=['id','tweet']).drop_duplicates(subset=['tweet'])
