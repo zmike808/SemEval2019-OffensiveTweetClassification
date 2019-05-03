@@ -26,8 +26,7 @@ sym_spell = SymSpell(max_dictionary_edit_distance=2, prefix_length=7,
 
 sym_spell.load_dictionary(Path('./frequency_dictionary_en_82_765.txt'), 0,1)
 
-def process_tweet(tweet,
-                  require_id=False,
+def process_tweet(data,
                   remove_USER_URL=True,
                   remove_punctuation=True,
                   remove_stopwords=True,
@@ -41,9 +40,13 @@ def process_tweet(tweet,
                   correct_spelling=True,
                   create_dict=True
                   ):
-    if type(tweet) is not str():
-        id = tweet[0]
-        tweet = tweet[1]
+    # print(type(tweet))
+    if type(data) is not str():
+
+        id = data[0]
+        tweet = data[1]
+    else:
+        tweet = data
 
     """
     This function receives tweets and returns clean word-list
@@ -176,8 +179,10 @@ def process_tweet(tweet,
     clean_tweet = " ".join(words)
     clean_tweet = re.sub("  ", " ", clean_tweet)
     clean_tweet = clean_tweet.lower()
-    if require_id:
+    print(f"Finished tweet {id}: {clean_tweet}")
+    if type(data) is not str():
         return [id, clean_tweet]
+
     return clean_tweet
 
 def under_sample(X, y):

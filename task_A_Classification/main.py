@@ -2,11 +2,13 @@ from sklearn.metrics import classification_report
 from sklearn.metrics import confusion_matrix
 import itertools
 import tensorflow as tf
+import multiprocessing
 from tensorflow import keras
 from tensorflow.keras.layers import Dense, Flatten, LSTM, Conv1D, MaxPooling1D, Dropout, Activation, Bidirectional, concatenate, \
     CuDNNLSTM, CuDNNGRU, SpatialDropout1D, GlobalAveragePooling1D, GlobalMaxPooling1D, Input, \
     Flatten, GRU
 from tensorflow.keras.layers import Embedding
+from multiprocessing import Pool
 from tensorflow.keras.models import Model, Sequential
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.preprocessing.text import Tokenizer
@@ -33,6 +35,7 @@ import threading
 import re
 import string
 import html
+import pickle
 import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
@@ -87,18 +90,27 @@ params = dict(remove_USER_URL=True,
               segment_words=True,
               correct_spelling=True
              )
-def threaded_process_tweets(dataset, kwargs, limit=10, trial=False):
+def threaded_process_tweets(dataset, kwargs, limit=48, trial=False):
     tweet_dataset = dataset.values
     results = []
-    with ProcessPoolExecutor(max_workers=limit) as executor:
-        future_tweets = {executor.submit(process_tweet, tweet, **kwargs, trial=trial): tweet for tweet in tweet_dataset}
-        for future in concurrent.futures.as_completed(future_tweets):
-            result = future.result()
-            results.append(result)
+    def process_tweet_trial(tweet_data):
+        return process_tweet(tweet_data, trial=True)
 
+    if trial:
+        target = process_tweet_trial
+    else:
+        target = process_tweet
+    with Pool() as pool:
+        results = pool.map(target, tweet_dataset, chunksize=multiprocessing.cpu_count())
+    # with ThreadPoolExecutor(max_workers=limit) as executor:
+    #     future_tweets = {executor.submit(process_tweet, tweet, **kwargs, trial=trial): tweet for tweet in tweet_dataset}
+    #     for future in concurrent.futures.as_completed(future_tweets):
+    #         result = future.result()
+    #         results.append(result)
+    with open("csv_results_tmp.pkl", "wb") as f:
+        pickle.dump(results, f)
+    print(results[0],results[-1])
     final = pd.DataFrame(results, columns=['id','tweet'])
-
-
     return final
     # print([tweet for tweet in tweet_dataset])
 
@@ -137,7 +149,7 @@ if not skip_cleaning:
     train_tweet = df_a['tweet'].values
     train_label = df_a['subtask_a'].values
 
-    newdata = threaded_process_tweets(df_a_trial[['id','tweet']], params, trial=False)#df_a['tweet'].apply(lambda x: process_tweet(x, **params, trial=False))
+    newdata = threaded_process_tweets(df_a_trial[['id','tweet']], params, trial=True)#df_a['tweet'].apply(lambda x: process_tweet(x, **params, trial=False))
     df_a_trial.update(newdata)
     df_a_trial['subtask_a'] = df_a_trial['subtask_a'].replace({'OFF': 1, 'NOT': 0})
 
