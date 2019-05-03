@@ -491,7 +491,7 @@ def doit(model, embed_idx, type=0):
 modelfuncs = [build_Bi_GRU_LSTM_CN_model, build_CNN_LSTM, build_LSTM_CNN,  build_LSTM]
 for func,i in zip(modelfuncs, range(len(modelfuncs))):
     model, embed_idx = func()
-    type = f'{i}_{str(func)}_{"balanced_dataset" if balance_dataset else ""}}'
+    type = f'{i}_{str(func)}_{"balanced_dataset" if balance_dataset else ""}'
     doit(model, embed_idx, i)
 
 # model, embed_idx =
