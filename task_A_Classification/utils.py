@@ -42,11 +42,11 @@ def process_tweet(data,
                   create_dict=True
                   ):
     # print(type(tweet))
-    if not trial:
-        id = data[0]
-        tweet = data[1]
-    else:
-        tweet = data
+    # if not trial:
+    #     id = data[0]
+    #     tweet = data[1]
+    # else:
+    tweet = data
 
     """
     This function receives tweets and returns clean word-list
@@ -179,13 +179,13 @@ def process_tweet(data,
     clean_tweet = re.sub("  ", " ", clean_tweet)
     clean_tweet = clean_tweet.lower()
 
-    if not trial:
-        print(f"Finished tweet {id}: {clean_tweet}")
-        return [id, clean_tweet]
-    print(f'cleaning trial data {trial}:{clean_tweet}')
-    if len(clean_tweet) < 1:
-        print('empty tweet, returning None!')
-        return pd.NaT
+    # if not trial:
+    print(f"Finished tweet : {clean_tweet}")
+        # return [id, clean_tweet]
+    # print(f'cleaning trial data {trial}:{clean_tweet}')
+    # if len(clean_tweet) < 1:
+        # print('empty tweet, returning None!')
+        # return
 
     return clean_tweet
 
@@ -202,3 +202,33 @@ def under_sample(X, y):
     y = y[idx].reshape(-1, 1)
 
     return X, y
+
+
+
+def quickprocess(data, trial=True):
+    tweet = data[0]#.tweet
+    subtask_a = data[1]#.subtask_a
+    processed = process_tweet(tweet, trial=True)
+    if not len(processed):
+        print('empty tweet uh oh')
+    print(data, (processed, subtask_a))
+    return (processed, subtask_a)
+
+def quickprocess_train(data):
+    return quickprocess(data, trial=False)
+
+import multiprocessing
+def data_cleaner(data, trial=True):
+    dataset = []
+    if trial:
+        target = quickprocess
+    else:
+        target = quickprocess_train
+
+    with multiprocessing.Pool() as pool:
+        dataset = pool.map(target, data.values)
+    print(len(dataset))
+    dataset = [x for x in dataset if len(x[0])]
+    print(len(dataset))
+    newdf = pd.DataFrame.from_records(dataset, columns=['tweet','subtask_a'])
+    return newdf

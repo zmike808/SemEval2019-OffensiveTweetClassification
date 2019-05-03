@@ -18,7 +18,7 @@ from tensorflow.keras import optimizers
 import tensorflow.keras.backend as K
 import os
 from symspellpy.symspellpy import SymSpell, Verbosity
-from utils import process_tweet, under_sample
+from utils import process_tweet, under_sample, data_cleaner
 import numpy as np
 import pandas as pd
 import sklearn
@@ -45,7 +45,7 @@ nltk.download('wordnet')
 nltk.download('stopwords')
 
 # Setting Flags
-balance_dataset = True             # If true, it under-samples the training dataset to get same amount of labels
+balance_dataset = False             # If true, it under-samples the training dataset to get same amount of labels
 use_pretrained_embeddings = True    # If true, it enables the use of GloVe pre-trained Twitter word-embeddings
 
 
@@ -62,7 +62,7 @@ if use_pretrained_embeddings:
     else:
         # Download embeddings from https://nlp.stanford.edu/projects/glove/
         #                          https://nlp.stanford.edu/data/glove.twitter.27B.zip
-        embedding_path = Path("glove.twitter.27B.200d.txt")
+        embedding_path = Path("glove.twitter.27B.100d.txt")
 
         def get_coefs(word, *arr):
             return word, np.asarray(arr, dtype='float32')
@@ -90,39 +90,9 @@ params = dict(remove_USER_URL=True,
               segment_words=True,
               correct_spelling=True
              )
-def process_tweet_trial(tweet_data):
-    return process_tweet(tweet_data, trial=True)
 
-def threaded_process_tweets(dataset, kwargs, limit=48) -> pd.DataFrame:
-    tweet_dataset = dataset.values
-
-    picklefile = Path(f'csv_results_tmp.pkl')
-
-    results = []
-    if not picklefile.exists():
-        with Pool() as pool:
-            chunksize=1#int(multiprocessing.cpu_count()*5)
-            results = pool.map(process_tweet, tweet_dataset, chunksize=chunksize)
-            with open(picklefile, "wb") as f:
-                pickle.dump(results, f)
-
-    with open(picklefile,'rb') as f:
-        results = pickle.load(f)
-
-    removed_empty = [x for x in results if len(x[1])]
-    emptylists = [x for x in results if not len(x[1])]
-
-    results = removed_empty
-    print(results[0], len(results), len(emptylists))
-    final = pd.DataFrame(results, columns=['id','tweet']).drop_duplicates(subset=['tweet'])
-    return final
-    # print([tweet for tweet in tweet_dataset])
-
-    #               traceback.print_exc()
 
 print("Loading training data")
-# train_balanced = Path('train_balanced.csv')
-# trial_balanced = Path('trial_balanced.csv')
 train_clean = Path('train_clean.csv')
 trial_clean = Path('trial_clean.csv')
 
@@ -140,6 +110,7 @@ try:
     df_a = dropped
 except:
     pass
+
 df_a_trial = pd.read_csv(trial_data, sep='\t')
 try:
     dropped = df_a_trial.drop(inplace=False,columns=['subtask_b', 'subtask_c'])
@@ -150,32 +121,29 @@ except:
 print("Done!")
 if not skip_cleaning:
     print("Preprocessing...")
+    if 'id' in df_a.columns:
+        df_a = df_a.drop(columns=['id'])
 
-    newdata = threaded_process_tweets(df_a[['id','tweet']], params)#df_a['tweet'].apply(lambda x: process_tweet(x, **params, trial=False))
-    merge = newdata.merge(df_a, on=['id'],suffixes=('','_dirty'))
-    merge = merge.drop(columns=['tweet_dirty'])
-    df_a = merge
     df_a['subtask_a'] = df_a['subtask_a'].replace({'OFF': 1, 'NOT': 0})
+    df_a = data_cleaner(df_a, trial=False)
 
     train_tweet = df_a['tweet'].values
     train_label = df_a['subtask_a'].values
 
-    #trial set is so small that theresno need to parallel
-    df_a_trial['tweet'].apply(lambda x: process_tweet(x, **params, trial=True))
     df_a_trial['subtask_a'] = df_a_trial['subtask_a'].replace({'OFF': 1, 'NOT': 0})
+    df_a_trial = data_cleaner(df_a_trial)
     print(len(df_a_trial))
-    df_a_trial = df_a_trial.dropna()
-    print(len(df_a_trial))
+
     trial_tweet = df_a_trial['tweet'].values
     trial_label = df_a_trial['subtask_a'].values
 
     print("Done!")
     df_a.to_csv(train_clean, columns=['id', 'tweet','subtask_a'])
     df_a_trial.to_csv(trial_clean, columns=(['tweet','subtask_a']))
+
     if balance_dataset:
         train_tweet, train_label = under_sample(train_tweet, train_label)
 else:
-    print(df_a.head(5))
     train_tweet = df_a['tweet'].values
     train_label = df_a['subtask_a'].values
     trial_tweet = df_a_trial['tweet'].values
