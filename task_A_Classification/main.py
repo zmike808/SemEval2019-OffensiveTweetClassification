@@ -45,38 +45,32 @@ nltk.download('wordnet')
 nltk.download('stopwords')
 
 # Setting Flags
-balance_dataset = False             # If true, it under-samples the training dataset to get same amount of labels
+balance_dataset = True             # If true, it under-samples the training dataset to get same amount of labels
 use_pretrained_embeddings = True    # If true, it enables the use of GloVe pre-trained Twitter word-embeddings
 
 
 #########################################################################################
 # 1. LOAD EMBEDDINGS AND BUILD EMBEDDINGS INDEX                                         #
 #########################################################################################
-embed_size = 100
+embed_size = 200
 
 if use_pretrained_embeddings:
-    path = Path("embedding_index.pkl")
-    if path.is_file():
-        with open("embedding_index.pkl", "rb") as f:
-            embedding_index = pickle.load(f)
-    else:
-        # Download embeddings from https://nlp.stanford.edu/projects/glove/
-        #                          https://nlp.stanford.edu/data/glove.twitter.27B.zip
-        embedding_path = Path("glove.twitter.27B.100d.txt")
+    # Download embeddings from https://nlp.stanford.edu/projects/glove/
+    #                          https://nlp.stanford.edu/data/glove.twitter.27B.zip
+    embedding_path = Path("glove.twitter.27B.200d.txt")
 
-        def get_coefs(word, *arr):
-            return word, np.asarray(arr, dtype='float32')
+    def get_coefs(word, *arr):
+        return word, np.asarray(arr, dtype='float32')
 
-        # Construct embedding table (word -> vector)
-        print("Building embedding index [word->vector]", end="\n")
-        t0 = time.time()
-        embedding_index = dict(get_coefs(*o.strip().split(" ")) for o in open(embedding_path, encoding="utf8"))
+    # Construct embedding table (word -> vector)
+    print("Building embedding index [word->vector]", end="\n")
+    t0 = time.time()
+    embedding_index = dict(get_coefs(*o.strip().split(" ")) for o in open(embedding_path, encoding="utf8"))
 
-        with open("embedding_index.pkl", "wb") as f:
-            pickle.dump(embedding_index, f)
+    with open("embedding_index.pkl", "wb") as f:
+        pickle.dump(embedding_index, f)
 
-        print(" - Done! ({:0.2f}s)".format(time.time() - t0))
-
+    print(" - Done! ({:0.2f}s)".format(time.time() - t0))
 #########################################################################################
 # 2. LOAD TWEET DATA AND PRE-PROCESS                                                    #
 #########################################################################################
@@ -95,23 +89,26 @@ params = dict(remove_USER_URL=True,
 print("Loading training data")
 train_clean = Path('train_clean.csv')
 trial_clean = Path('trial_clean.csv')
-
+preclean_train =  Path('start-kit/training-v1/offenseval-training-v1.tsv')
+preclean_trial =  Path('start-kit/trial-data/offenseval-trial.txt')
 if train_clean.exists and trial_clean.exists():
     train_data = train_clean
     trial_data=trial_clean
+    varsep=','
     skip_cleaning=True
 else:
     train_data = Path('start-kit/training-v1/offenseval-training-v1.tsv')
     trial_data = Path('start-kit/trial-data/offenseval-trial.txt')
+    varsep = '\t'
     skip_cleaning=False
-df_a = pd.read_csv(train_data, sep='\t')
+df_a = pd.read_csv(train_data, sep=varsep)
 try:
     dropped = df_a.drop(inplace=False,columns=['subtask_b', 'subtask_c'])
     df_a = dropped
 except:
     pass
 
-df_a_trial = pd.read_csv(trial_data, sep='\t')
+df_a_trial = pd.read_csv(trial_data, sep=varsep)
 try:
     dropped = df_a_trial.drop(inplace=False,columns=['subtask_b', 'subtask_c'])
     df_a_trial = dropped
@@ -151,19 +148,25 @@ else:
     if balance_dataset:
         train_tweet, train_label = under_sample(train_tweet, train_label)
 class_weights = sklearn.utils.class_weight.compute_class_weight('balanced', np.unique(train_label), train_label.reshape(-1))
-
-# print("EXAMPLES OF PROCESSED TWEETS [train/trial]")
-# print("_________________________________________________________________________________________________________")
-# for id in range(10, 15):
-#     print("Un-processed:  " + df_a['tweet'][id])
-#     print("Processed:     " + X[id])
-#     print("")
-# print("_________________________________________________________________________________________________________")
-# for id in range(10, 15):
-#     print("Un-processed:  " + df_a_trial['tweet'][id])
-#     print("Processed:     " + trial_tweet[id])
-#     print("")
-
+def tweet_process_stats(cleantrain=df_a, cleantrial= df_a_trial, pretrain=preclean_train, pretrial=preclean_trial):
+    untrained= pd.from_csv(pretrain)
+    untrailed= pd.from_csv(pretrial)
+    with open('tweet_comparison_stats.log','w') as f:
+        def _print(str):
+            print(str, file=f)
+        _print("EXAMPLES OF PROCESSED TWEETS [train/trial]")
+        _print()
+        _print("_________________________________________________________________________________________________________")
+        for id in range(10, 15):
+            _print("Un-processed:  " + untrained['tweet'][id])
+            _print("Processed:     " + cleantrain['tweet'][id])
+            _print("")
+        _print("_________________________________________________________________________________________________________")
+        for id in range(10, 15):
+            _print("Un-processed:  " + untrailed['tweet'][id])
+            _print("Processed:     " + cleantrial['tweet'][id])
+            _print("")
+tweet_process_stats()
 #########################################################################################
 # 3. BUILD VOCABULARY FROM FULL CORPUS AND PREPARE INPUT                                #
 #    Tokenize tweets | Turn into Index sequences | Pad sequences | Word embeddings      #
@@ -235,12 +238,12 @@ fig.savefig("sentence_lenghts.pdf", bbox_inches="tight")
 LR               = 0.004
 LR_DECAY         = 0
 EPOCHS           = 20
-BATCH_SIZE       = 32
+BATCH_SIZE       = 128
 EMBEDDING_DIM    = embed_size
-DROPOUT          = 0.4         # Connection drop ratio for CNN to LSTM dropout
+DROPOUT          = 0.2         # Connection drop ratio for CNN to LSTM dropout
 LSTM_DROPOUT     = 0.0         # Connection drop ratio for gate-specific dropout
 BIDIRECTIONAL    = True
-RECURRENT_UNITS  = 100
+RECURRENT_UNITS  = 128
 train_embeddings = not use_pretrained_embeddings
 
 #########################################################################################
@@ -357,7 +360,7 @@ def doit(model, embed_idx, type=0):
         model.layers[embed_idx].set_weights([embedding_matrix])
     model.summary()
 
-    X_train, X_val, y_train, y_val = train_test_split(train_tweet, train_label, test_size=0.2, stratify=train_label)
+    X_train, X_val, y_train, y_val = train_test_split(train_tweet, train_label, test_size=0.1, stratify=train_label)
 
     class_weights = sklearn.utils.class_weight.compute_class_weight('balanced', np.unique(y_train), y_train.reshape(-1))
     weights_dict = dict()
@@ -477,13 +480,18 @@ def doit(model, embed_idx, type=0):
     plt.show()
     print(cm)
 
-    print(classification_report(y_eval, y_pred))
+    dictreport = classification_report(y_eval, y_pred, output_dict=True,labels=['NOT','OFF'])
+    report = classification_report(y_eval, y_pred, output_dict=False,labels=['NOT','OFF'])
+    with open(f'classification_report.{type}.latex','w') as f:
+        pd.DataFrame.from_dict(dictreport).to_latex(f)
+    with open(f'classification_report.{type}.log', 'w') as f:
+        print(report, file=f)
 
 
-
-modelfuncs = [build_Bi_GRU_LSTM_CN_model, build_CNN_LSTM, build_LSTM_CNN,  build_LSTM, ]
+modelfuncs = [build_Bi_GRU_LSTM_CN_model, build_CNN_LSTM, build_LSTM_CNN,  build_LSTM]
 for func,i in zip(modelfuncs, range(len(modelfuncs))):
     model, embed_idx = func()
+    type = f'{i}_{str(func)}_{"balanced_dataset" if balance_dataset else ""}}'
     doit(model, embed_idx, i)
 
 # model, embed_idx =

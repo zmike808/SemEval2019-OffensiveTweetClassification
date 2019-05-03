@@ -22,7 +22,6 @@ sym_spell = SymSpell(max_dictionary_edit_distance=2, prefix_length=7,
                  count_threshold=1, compact_level=0)
 
 
-
 # sym_spell.create_dictionary(Path('english_words_479k.txt'))
 
 sym_spell.load_dictionary(Path('./frequency_dictionary_en_82_765.txt'), 0,1)
@@ -194,7 +193,6 @@ def under_sample(X, y):
     y = y[idx].reshape(-1, 1)
 
     return X, y
-
 
 
 def quickprocess(data, trial=True):
